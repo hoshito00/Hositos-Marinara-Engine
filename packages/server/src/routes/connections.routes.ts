@@ -6,6 +6,7 @@ import { MODEL_LISTS, createConnectionSchema, inferImageSource } from "@marinara
 import { createConnectionsStorage } from "../services/storage/connections.storage.js";
 import { createLLMProvider } from "../services/llm/provider-registry.js";
 import { fetchOpenAIChatGPTModels, getOpenAIChatGPTAuth } from "../services/llm/openai-chatgpt-auth.js";
+import { buildGoogleVertexModelUrl, googleAuthHeadersForVertex } from "../services/llm/providers/google.provider.js";
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import { isImageLocalUrlsEnabled, isProviderLocalUrlsEnabled } from "../config/runtime-config.js";
 import { logDebugOverride } from "../lib/logger.js";
@@ -88,6 +89,7 @@ function describeTestMessageTarget(provider: string, baseUrl: string, model: str
   if (provider === "claude_subscription") return "Claude Agent SDK";
   if (provider === "openai_chatgpt") return "local ChatGPT session";
   if (!baseUrl) return "(no base URL)";
+  if (provider === "google_vertex") return buildGoogleVertexModelUrl(baseUrl, model, "generateContent");
   if (isOpenAICompatibleProvider(provider)) {
     return `${baseUrl}${usesResponsesEndpointForTestMessage(provider, model) ? "/responses" : "/chat/completions"}`;
   }
@@ -290,6 +292,9 @@ export async function connectionsRoutes(app: FastifyInstance) {
       if (provider?.apiKeyHeader) {
         headers[provider.apiKeyHeader] = conn.apiKey;
       }
+      if (conn.provider === "google_vertex") {
+        Object.assign(headers, await googleAuthHeadersForVertex(conn.apiKey));
+      }
 
       const imageSource =
         conn.provider === "image_generation" ? resolveImageGenerationSource(conn as any, baseUrl) : "";
@@ -319,6 +324,8 @@ export async function connectionsRoutes(app: FastifyInstance) {
           latencyMs: Date.now() - start,
           modelName: conn.model,
         };
+      } else if (conn.provider === "google_vertex") {
+        testUrl = buildGoogleVertexModelUrl(baseUrl, conn.model, "models");
       } else {
         testUrl = `${baseUrl}${provider?.modelsEndpoint || "/models"}`;
       }
@@ -407,6 +414,9 @@ export async function connectionsRoutes(app: FastifyInstance) {
       }
       if (provider?.apiKeyHeader) {
         headers[provider.apiKeyHeader] = conn.apiKey;
+      }
+      if (conn.provider === "google_vertex") {
+        Object.assign(headers, await googleAuthHeadersForVertex(conn.apiKey));
       }
 
       // Anthropic requires version header for models endpoint
@@ -611,7 +621,10 @@ export async function connectionsRoutes(app: FastifyInstance) {
         return { models };
       }
 
-      let modelsUrl = `${baseUrl}${provider?.modelsEndpoint ?? "/models"}`;
+      let modelsUrl =
+        conn.provider === "google_vertex"
+          ? buildGoogleVertexModelUrl(baseUrl, conn.model, "models")
+          : `${baseUrl}${provider?.modelsEndpoint ?? "/models"}`;
       if (conn.provider === "google") {
         modelsUrl += `?key=${conn.apiKey}`;
       }
@@ -896,6 +909,22 @@ function normalizeModelsResponse(provider: string, json: Record<string, unknown>
         .map((m) => ({
           id: (m.name ?? "").replace(/^models\//, ""),
           name: m.displayName ?? (m.name ?? "").replace(/^models\//, ""),
+        }))
+        .filter((m) => m.id);
+    }
+
+    case "google_vertex": {
+      // Vertex AI returns { publisherModels: [{ name: "publishers/google/models/gemini-...", ... }] }
+      const models = (json.publisherModels ?? []) as Array<{
+        name?: string;
+        displayName?: string;
+        supportedActions?: { viewRestApi?: unknown };
+      }>;
+      return models
+        .filter((m) => m.name?.includes("/models/"))
+        .map((m) => ({
+          id: (m.name ?? "").replace(/^.*\/models\//, ""),
+          name: m.displayName ?? (m.name ?? "").replace(/^.*\/models\//, ""),
         }))
         .filter((m) => m.id);
     }

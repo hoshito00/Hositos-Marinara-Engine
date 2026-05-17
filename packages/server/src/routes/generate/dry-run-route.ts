@@ -683,7 +683,7 @@ export async function registerDryRunRoute(app: FastifyInstance) {
       ];
     }
 
-    const isGoogleProvider = conn.provider === "google";
+    const isGoogleProvider = conn.provider === "google" || conn.provider === "google_vertex";
     let mappedMessages = chatMessages.map((m: any) => {
       const extra = parseExtra(m.extra);
       const attachments = extra.attachments as PromptAttachment[] | undefined;

@@ -9,6 +9,7 @@ export type APIProvider =
   | "anthropic"
   | "claude_subscription"
   | "google"
+  | "google_vertex"
   | "mistral"
   | "cohere"
   | "openrouter"

@@ -9,6 +9,7 @@ export const apiProviderSchema = z.enum([
   "anthropic",
   "claude_subscription",
   "google",
+  "google_vertex",
   "mistral",
   "cohere",
   "openrouter",

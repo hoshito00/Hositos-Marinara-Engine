@@ -619,6 +619,7 @@ export const MODEL_LISTS: Record<APIProvider, KnownModel[]> = {
   anthropic: ANTHROPIC_MODELS,
   claude_subscription: CLAUDE_SUBSCRIPTION_MODELS,
   google: GOOGLE_MODELS,
+  google_vertex: GOOGLE_MODELS,
   mistral: MISTRAL_MODELS,
   cohere: COHERE_MODELS,
   openrouter: OPENROUTER_MODELS,

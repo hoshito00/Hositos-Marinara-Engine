@@ -80,6 +80,10 @@ const API_KEY_LINKS: Partial<Record<APIProvider, { label: string; url: string }>
   openai: { label: "Get your OpenAI API key", url: "https://platform.openai.com/api-keys" },
   anthropic: { label: "Get your Anthropic API key", url: "https://console.anthropic.com/settings/keys" },
   google: { label: "Get your Google AI API key", url: "https://aistudio.google.com/apikey" },
+  google_vertex: {
+    label: "Open Vertex AI credentials docs",
+    url: "https://cloud.google.com/vertex-ai/docs/authentication",
+  },
   mistral: { label: "Get your Mistral API key", url: "https://console.mistral.ai/api-keys" },
   cohere: { label: "Get your Cohere API key", url: "https://dashboard.cohere.com/api-keys" },
   openrouter: { label: "Get your OpenRouter API key", url: "https://openrouter.ai/keys" },
@@ -874,6 +878,25 @@ export function ConnectionEditor() {
               <p className="mt-1.5 text-[0.625rem] text-[var(--muted-foreground)]">
                 Marinara reads the local Codex auth file and refreshes the ChatGPT session when possible. Embeddings are
                 not available on this provider; configure a separate connection for embedding work.
+              </p>
+            </div>
+          )}
+
+          {localProvider === "google_vertex" && (
+            <div className="rounded-xl bg-sky-400/5 px-3 py-2.5 ring-1 ring-sky-400/30">
+              <p className="flex items-start gap-1.5 text-[0.6875rem] text-sky-300">
+                <AlertCircle size="0.75rem" className="mt-px shrink-0" />
+                <span>
+                  Uses Vertex AI&apos;s Gemini endpoint. Set Base URL to your project and location, then paste either a
+                  service account JSON key, an OAuth access token, or a Vertex API key when your project supports API
+                  key auth.
+                </span>
+              </p>
+              <p className="mt-1.5 text-[0.625rem] text-[var(--muted-foreground)]">
+                Example Base URL:{" "}
+                <code className="rounded bg-[var(--secondary)] px-1">
+                  https://us-central1-aiplatform.googleapis.com/v1/projects/my-project/locations/us-central1
+                </code>
               </p>
             </div>
           )}

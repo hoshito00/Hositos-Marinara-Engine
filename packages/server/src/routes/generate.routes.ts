@@ -1143,7 +1143,7 @@ export async function generateRoutes(app: FastifyInstance) {
         chatMessages = chatMessages.slice(-contextMessageLimit);
       }
 
-      const isGoogleProvider = conn.provider === "google";
+      const isGoogleProvider = conn.provider === "google" || conn.provider === "google_vertex";
 
       const mappedMessages = chatMessages.map((m: any) => {
         const extra = parseExtra(m.extra);
