@@ -537,7 +537,7 @@ async function resolveRetryAgents(args: {
   const chatConnectionMaxParallelJobs = Number(conn.maxParallelJobs) || 1;
   const resolvedAgents: ResolvedRetryAgent[] = [];
   const skippedLocalSidecarAgents: string[] = [];
-  const danglingConnectionAgents: string[] = [];
+  const danglingConnectionAgents = new Set<string>();
   const defaultAgentConnectionAgents: string[] = [];
   const defaultAgentConn = await conns.getDefaultForAgents();
   const defaultAgentConnection = defaultAgentConn
@@ -593,7 +593,7 @@ async function resolveRetryAgents(args: {
       } else {
         const agentConn = await conns.getWithKey(effectiveConnectionId);
         if (!agentConn) {
-          danglingConnectionAgents.push(cfg.name ?? cfg.type);
+          danglingConnectionAgents.add(cfg.name ?? cfg.type);
           logger.warn(
             "[retry-agents] Skipping agent %s because connection %s no longer exists",
             cfg.type,
@@ -640,8 +640,8 @@ async function resolveRetryAgents(args: {
   if (skippedLocalSidecarAgents.length > 0) {
     warnings.push(buildLocalSidecarUnavailableWarning(skippedLocalSidecarAgents));
   }
-  if (danglingConnectionAgents.length > 0) {
-    warnings.push(buildDanglingAgentConnectionWarning(danglingConnectionAgents));
+  if (danglingConnectionAgents.size > 0) {
+    warnings.push(buildDanglingAgentConnectionWarning(Array.from(danglingConnectionAgents)));
   }
 
   for (const builtIn of builtInFallbackConfigs) {

@@ -3967,7 +3967,7 @@ export async function generateRoutes(app: FastifyInstance) {
 
         const agentConnectionWarnings: AgentConnectionWarning[] = [];
         const skippedLocalSidecarAgents: string[] = [];
-        const danglingConnectionAgents: string[] = [];
+        const danglingConnectionAgents = new Set<string>();
         const defaultAgentConnectionAgents: string[] = [];
         let responseOrchestratorSelectorAgent: ResolvedAgent | null = null;
         let responseOrchestratorSelectorUnavailable = false;
@@ -4010,7 +4010,7 @@ export async function generateRoutes(app: FastifyInstance) {
             } else {
               const agentConn = await connections.getWithKey(effectiveConnectionId);
               if (!agentConn) {
-                danglingConnectionAgents.push(cfg.name ?? cfg.type);
+                danglingConnectionAgents.add(cfg.name ?? cfg.type);
                 logger.warn(
                   "[generate] Skipping agent %s for chat %s because connection %s no longer exists",
                   cfg.type,
@@ -4055,9 +4055,6 @@ export async function generateRoutes(app: FastifyInstance) {
         }
         if (skippedLocalSidecarAgents.length > 0) {
           agentConnectionWarnings.push(buildLocalSidecarUnavailableWarning(skippedLocalSidecarAgents));
-        }
-        if (danglingConnectionAgents.length > 0) {
-          agentConnectionWarnings.push(buildDanglingAgentConnectionWarning(danglingConnectionAgents));
         }
 
         // Built-in agents with no DB row → use defaults only if explicitly in the per-chat list
@@ -4168,7 +4165,7 @@ export async function generateRoutes(app: FastifyInstance) {
                     const agentConn = await connections.getWithKey(effectiveConnectionId);
                     if (!agentConn) {
                       responseOrchestratorSelectorUnavailable = true;
-                      agentConnectionWarnings.push(buildDanglingAgentConnectionWarning(["Response Orchestrator"]));
+                      danglingConnectionAgents.add("Response Orchestrator");
                       logger.warn(
                         "[group-smart] Skipping Response Orchestrator for chat %s because connection %s no longer exists",
                         input.chatId,
@@ -4217,6 +4214,9 @@ export async function generateRoutes(app: FastifyInstance) {
         }
 
         if (defaultAgentConn && defaultAgentConnectionAgents.length > 0) {
+          if (danglingConnectionAgents.size > 0) {
+            agentConnectionWarnings.push(buildDanglingAgentConnectionWarning(Array.from(danglingConnectionAgents)));
+          }
           agentConnectionWarnings.push(
             buildDefaultAgentConnectionWarning({
               agentNames: defaultAgentConnectionAgents,
@@ -4224,6 +4224,8 @@ export async function generateRoutes(app: FastifyInstance) {
               model: defaultAgentConn.model,
             }),
           );
+        } else if (danglingConnectionAgents.size > 0) {
+          agentConnectionWarnings.push(buildDanglingAgentConnectionWarning(Array.from(danglingConnectionAgents)));
         }
 
         logger.info(

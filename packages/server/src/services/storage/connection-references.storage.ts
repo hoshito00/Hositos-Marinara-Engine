@@ -30,6 +30,32 @@ export async function listConnectionReferences(db: DB, connectionId: string): Pr
   };
 }
 
+export async function deleteConnectionIfUnreferenced(
+  db: DB,
+  connectionId: string,
+): Promise<{ deleted: true; references: ConnectionReferences } | { deleted: false; references: ConnectionReferences }> {
+  return db.transaction(async (tx) => {
+    const [agentRows, chatRows] = await Promise.all([
+      tx
+        .select({ id: agentConfigs.id, name: agentConfigs.name, type: agentConfigs.type })
+        .from(agentConfigs)
+        .where(eq(agentConfigs.connectionId, connectionId)),
+      tx
+        .select({ id: chats.id, name: chats.name, mode: chats.mode })
+        .from(chats)
+        .where(eq(chats.connectionId, connectionId)),
+    ]);
+    const references = { agents: agentRows, chats: chatRows };
+
+    if (hasConnectionReferences(references)) {
+      return { deleted: false, references };
+    }
+
+    await tx.delete(apiConnections).where(eq(apiConnections.id, connectionId));
+    return { deleted: true, references };
+  });
+}
+
 export async function deleteConnectionAndClearReferences(db: DB, connectionId: string): Promise<ConnectionReferences> {
   const references = await listConnectionReferences(db, connectionId);
   const timestamp = now();

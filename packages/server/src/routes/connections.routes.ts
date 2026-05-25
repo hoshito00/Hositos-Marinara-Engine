@@ -10,8 +10,7 @@ import { buildGoogleVertexModelUrl, googleAuthHeadersForVertex } from "../servic
 import { resolveConnectionImageDefaults } from "../services/image/image-generation-defaults.js";
 import {
   deleteConnectionAndClearReferences,
-  hasConnectionReferences,
-  listConnectionReferences,
+  deleteConnectionIfUnreferenced,
 } from "../services/storage/connection-references.storage.js";
 import { isImageLocalUrlsEnabled, isProviderLocalUrlsEnabled } from "../config/runtime-config.js";
 import { logDebugOverride } from "../lib/logger.js";
@@ -226,15 +225,6 @@ export async function connectionsRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string }; Querystring: { force?: string | boolean } }>("/:id", async (req, reply) => {
     const force = req.query.force === true || req.query.force === "true";
-    const references = await listConnectionReferences(app.db, req.params.id);
-
-    if (hasConnectionReferences(references) && !force) {
-      return reply.status(409).send({
-        error: "connection_in_use",
-        message: "Connection is still used by agents or chats. Repoint them first, or delete with force=true.",
-        references,
-      });
-    }
 
     if (force) {
       const clearedReferences = await deleteConnectionAndClearReferences(app.db, req.params.id);
@@ -246,7 +236,15 @@ export async function connectionsRoutes(app: FastifyInstance) {
       });
     }
 
-    await storage.remove(req.params.id);
+    const result = await deleteConnectionIfUnreferenced(app.db, req.params.id);
+    if (!result.deleted) {
+      return reply.status(409).send({
+        error: "connection_in_use",
+        message: "Connection is still used by agents or chats. Repoint them first, or delete with force=true.",
+        references: result.references,
+      });
+    }
+
     return reply.status(204).send();
   });
 
