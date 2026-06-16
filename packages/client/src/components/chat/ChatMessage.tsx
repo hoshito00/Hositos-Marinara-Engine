@@ -516,8 +516,37 @@ function extractChatStyleBlocks(html: string): { html: string; css: string } {
   return { html: withoutStyles, css: cssBlocks.join("\n") };
 }
 
+/** Decode CSS escape sequences (`\XX` hex, `\c` literal) to the characters a browser parses. */
+function decodeCssEscapes(input: string): string {
+  return input.replace(/\\(?:([0-9a-fA-F]{1,6})\s?|([\s\S]))/g, (_m, hex: string | undefined, ch: string | undefined) => {
+    if (hex) {
+      const cp = parseInt(hex, 16);
+      return cp > 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : "";
+    }
+    return ch ?? "";
+  });
+}
+
+// Match a quoted string (group 1) OR a single CSS escape sequence. Strings come first so the
+// scanner steps over them, leaving their contents untouched.
+const STRING_OR_ESCAPE = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')|\\(?:[0-9a-fA-F]{1,6}\s?|[\s\S])/g;
+
+// Canonicalize CSS escapes that spell a token character (ASCII letter, `@`, or `-`) so the
+// literal-text guards in sanitizeChatCss can't be bypassed by escaping (e.g. `\75rl(` → `url(`,
+// `po\73ition` → `position`, `\40 import` → `@import`). Escapes resolving to digits/punctuation
+// and all string contents are preserved so benign selectors like `.\32 xl` and `.w-1\/2` stay exact.
+function canonicalizeKeywordEscapes(css: string): string {
+  return css.replace(STRING_OR_ESCAPE, (match: string, stringLiteral: string | undefined) => {
+    if (stringLiteral !== undefined) return stringLiteral;
+    const decoded = decodeCssEscapes(match);
+    return /^[-A-Za-z@]$/.test(decoded) ? decoded : match;
+  });
+}
+
 function sanitizeChatCss(css: string): string {
-  return css
+  // Normalize escaped keyword characters first so every literal-text guard below sees the tokens a
+  // browser would actually parse. Without this, CSS escapes (`\75rl(`, `po\73ition`) slip past.
+  return canonicalizeKeywordEscapes(css)
     .replace(/<\/?style\b[^>]*>/gi, "")
     .replace(/@import\s+[^;]+;?/gi, "")
     .replace(/@namespace\s+[^;]+;?/gi, "")
