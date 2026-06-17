@@ -84,7 +84,8 @@ function applyScripts(
         // Display context: gate the scoped script by the chat's tri-state mode —
         // disabled → off; exclusive → only on a target character's own messages;
         // chat → on every message.
-        const mode = options?.scopedMode ?? "disabled";
+        const rawMode = options?.scopedMode;
+        const mode: ScopedRegexMode = rawMode === "exclusive" || rawMode === "chat" ? rawMode : "disabled";
         if (mode === "disabled") continue;
         if (mode === "exclusive") {
           const charId = options?.characterId;

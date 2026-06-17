@@ -335,6 +335,13 @@ function invalidTagImportModeResponse() {
   };
 }
 
+function invalidRegexScriptScopeResponse() {
+  return {
+    success: false,
+    error: "Invalid regexScriptScope. Expected one of: character, global.",
+  };
+}
+
 type MultipartImportFile = { filename?: string; buffer: Buffer };
 
 async function readMultipartFileWithFields(req: FastifyRequest) {
@@ -702,7 +709,12 @@ export async function importRoutes(app: FastifyInstance) {
         : rawTagImportModeField?.value;
       const tagImportMode = readMultipartTagImportMode(file as any);
       if (rawTagImportMode !== undefined && tagImportMode === undefined) return invalidTagImportModeResponse();
+      const rawRegexScriptScopeField = (file as any)?.fields?.regexScriptScope;
+      const rawRegexScriptScope = Array.isArray(rawRegexScriptScopeField)
+        ? rawRegexScriptScopeField.at(-1)?.value
+        : rawRegexScriptScopeField?.value;
       const regexScriptScope = readMultipartRegexScriptScope(file as any);
+      if (rawRegexScriptScope !== undefined && regexScriptScope === undefined) return invalidRegexScriptScopeResponse();
       return importCharacterBuffer(
         file.filename ?? "",
         await file.toBuffer(),
@@ -721,7 +733,9 @@ export async function importRoutes(app: FastifyInstance) {
     const rawTagImportMode = body.tagImportMode;
     const tagImportMode = readTagImportMode(rawTagImportMode);
     if (rawTagImportMode !== undefined && tagImportMode === undefined) return invalidTagImportModeResponse();
-    const regexScriptScope = readRegexScriptScope(body.regexScriptScope);
+    const rawRegexScriptScope = body.regexScriptScope;
+    const regexScriptScope = readRegexScriptScope(rawRegexScriptScope);
+    if (rawRegexScriptScope !== undefined && regexScriptScope === undefined) return invalidRegexScriptScopeResponse();
     delete body.importEmbeddedLorebook;
     delete body.tagImportMode;
     delete body.regexScriptScope;
@@ -773,6 +787,7 @@ export async function importRoutes(app: FastifyInstance) {
     let tagImportMode: STCharacterTagImportMode | undefined;
     let invalidTagImportMode = false;
     let regexScriptScope: "character" | "global" | undefined;
+    let invalidRegexScriptScope = false;
 
     for await (const part of parts) {
       if (part.type === "file") {
@@ -805,10 +820,12 @@ export async function importRoutes(app: FastifyInstance) {
 
       if (part.fieldname === "regexScriptScope") {
         regexScriptScope = readRegexScriptScope(part.value);
+        invalidRegexScriptScope ||= part.value !== undefined && regexScriptScope === undefined;
       }
     }
 
     if (invalidTagImportMode) return { ...invalidTagImportModeResponse(), results: [] };
+    if (invalidRegexScriptScope) return { ...invalidRegexScriptScopeResponse(), results: [] };
 
     if (files.length === 0) {
       return { success: false, error: "No files uploaded", results: [] };
@@ -904,9 +921,11 @@ export async function importRoutes(app: FastifyInstance) {
       return reply.send(invalidTagImportModeResponse());
     }
     if (characterTagImportMode) options.characterTagImportMode = characterTagImportMode;
-    const bulkRegexScriptScope = readRegexScriptScope(
-      (req.body as { options?: { regexScriptScope?: unknown } }).options?.regexScriptScope,
-    );
+    const rawBulkRegexScriptScope = (req.body as { options?: { regexScriptScope?: unknown } }).options?.regexScriptScope;
+    const bulkRegexScriptScope = readRegexScriptScope(rawBulkRegexScriptScope);
+    if (rawBulkRegexScriptScope !== undefined && bulkRegexScriptScope === undefined) {
+      return reply.send(invalidRegexScriptScopeResponse());
+    }
     if (bulkRegexScriptScope) options.regexScriptScope = bulkRegexScriptScope;
 
     // Set up SSE headers

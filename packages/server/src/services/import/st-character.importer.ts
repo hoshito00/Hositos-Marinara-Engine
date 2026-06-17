@@ -117,7 +117,7 @@ function convertStRegexScripts(
 ): CreateRegexScriptInput[] {
   if (!Array.isArray(stScripts)) return [];
   const out: CreateRegexScriptInput[] = [];
-  for (const entry of stScripts) {
+  for (const [index, entry] of stScripts.entries()) {
     if (!entry || typeof entry !== "object") continue;
     const s = entry as Record<string, unknown>;
     const rawFind = typeof s.findRegex === "string" ? s.findRegex.trim() : "";
@@ -147,7 +147,10 @@ function convertStRegexScripts(
       // Regex mode — they stay opt-in per chat rather than always rewriting prompts.
       promptOnly: false,
       targetCharacterIds: scope === "global" ? [] : [characterId],
-      order: 0,
+      // Preserve the card's authoring order so multi-script imports keep a stable
+      // execution/list order (all-zero ties leave it undefined). Gaps from skipped
+      // entries are harmless — list() only sorts by ascending order.
+      order: index,
       minDepth: typeof s.minDepth === "number" ? s.minDepth : null,
       maxDepth: typeof s.maxDepth === "number" ? s.maxDepth : null,
     });
