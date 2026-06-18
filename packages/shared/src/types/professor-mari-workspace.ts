@@ -145,6 +145,17 @@ export interface MariWorkspaceStatus {
 export type MariWorkspacePromptEvent =
   | { type: "token"; data: string }
   | { type: "thinking"; data: string }
+  | {
+      type: "status";
+      data:
+        | string
+        | {
+            content: string;
+            kind?: "compaction_start" | "compaction_end" | "output_limit" | "retry" | "info";
+            level?: "info" | "warning" | "error";
+            reason?: string;
+          };
+    }
   | { type: "tool_start"; data: { id?: string; name: string; input?: unknown } }
   | { type: "tool_update"; data: { id?: string; name?: string; output?: string } }
   | { type: "tool_end"; data: { id?: string; name?: string; isError?: boolean; output?: string } }

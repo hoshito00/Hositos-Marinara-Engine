@@ -49,7 +49,7 @@ import { apiConnections } from "../../db/schema/index.js";
 import { decryptApiKey } from "../../utils/crypto.js";
 import { DATA_DIR } from "../../utils/data-dir.js";
 import { logger } from "../../lib/logger.js";
-import { PROFESSOR_MARI_ID } from "@marinara-engine/shared";
+import { findKnownModel, MODEL_LISTS, PROFESSOR_MARI_ID, type APIProvider } from "@marinara-engine/shared";
 import type {
   MariWorkspaceConnectionSummary,
   MariWorkspacePromptEvent,
@@ -239,6 +239,14 @@ function appendTraceThinking(trace: MariWorkspaceTraceItem[], delta: string) {
     return;
   }
   trace.push({ type: "thinking", content: delta });
+}
+
+function appendTraceStatus(trace: MariWorkspaceTraceItem[], content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return;
+  const last = trace[trace.length - 1];
+  if (last?.type === "status" && last.content === trimmed) return;
+  trace.push({ type: "status", content: trimmed });
 }
 
 function upsertTraceTool(trace: MariWorkspaceTraceItem[], update: MariWorkspaceTraceTool) {
@@ -631,11 +639,30 @@ function mapUsage(usage: LLMUsage | undefined): AssistantMessage["usage"] {
   };
 }
 
+function normalizeCatalogProvider(provider: string): APIProvider | null {
+  const normalized = provider.replace(/-/g, "_");
+  return normalized in MODEL_LISTS ? (normalized as APIProvider) : null;
+}
+
+function resolveMariMaxOutputTokens(connection: ConnectionWithKey) {
+  if (connection.maxTokensOverride && connection.maxTokensOverride > 0) {
+    return Math.floor(connection.maxTokensOverride);
+  }
+  const provider = normalizeCatalogProvider(connection.provider);
+  const knownModel = provider ? findKnownModel(provider, connection.model.trim()) : undefined;
+  if (knownModel?.maxOutput && knownModel.maxOutput > 0) return Math.floor(knownModel.maxOutput);
+  return 8192;
+}
+
+function isLengthFinishReason(reason: string | undefined | null) {
+  const normalized = String(reason ?? "").toLowerCase();
+  return normalized === "length" || normalized === "max_tokens" || normalized === "max_output_tokens";
+}
+
 function createPiModel(connection: ConnectionWithKey): Model<string> {
   const maxContext =
     Number.isFinite(connection.maxContext) && connection.maxContext > 0 ? connection.maxContext : 128000;
-  const maxTokens =
-    connection.maxTokensOverride && connection.maxTokensOverride > 0 ? connection.maxTokensOverride : 8192;
+  const maxTokens = resolveMariMaxOutputTokens(connection);
   return {
     id: MARINARA_MODEL,
     name: `${connection.name || "Marinara Connection"} / ${connection.model || "model"}`,
@@ -782,6 +809,38 @@ export class ProfessorMariWorkspaceService {
             output,
           },
         });
+      } else if (event.type === "compaction_start") {
+        const content =
+          raw.reason === "manual"
+            ? "Compacting workspace history..."
+            : "Compacting older workspace history so Mari can keep going...";
+        appendTraceStatus(workspaceTrace, content);
+        args.onEvent({
+          type: "status",
+          data: { content, kind: "compaction_start", reason: typeof raw.reason === "string" ? raw.reason : undefined },
+        });
+      } else if (event.type === "compaction_end") {
+        const error = typeof raw.errorMessage === "string" && raw.errorMessage.trim() ? raw.errorMessage.trim() : null;
+        const aborted = raw.aborted === true;
+        const content = error
+          ? `History compaction failed: ${error}`
+          : aborted
+            ? "History compaction was cancelled."
+            : "Older workspace history compacted.";
+        appendTraceStatus(workspaceTrace, content);
+        args.onEvent({
+          type: "status",
+          data: {
+            content,
+            kind: "compaction_end",
+            level: error ? "error" : aborted ? "warning" : "info",
+            reason: typeof raw.reason === "string" ? raw.reason : undefined,
+          },
+        });
+      } else if (event.type === "auto_retry_start") {
+        const content = `Retrying model call after a streaming error (${raw.attempt}/${raw.maxAttempts})...`;
+        appendTraceStatus(workspaceTrace, content);
+        args.onEvent({ type: "status", data: { content, kind: "retry", level: "warning" } });
       }
     });
 
@@ -791,6 +850,12 @@ export class ProfessorMariWorkspaceService {
       const finalText = extractAssistantText(lastAssistant) || session.getLastAssistantText() || "";
       const finalThinking = extractAssistantThinking(lastAssistant);
       const finalError = extractAssistantError(lastAssistant);
+      const finalStopReason = typeof lastAssistant?.stopReason === "string" ? lastAssistant.stopReason : null;
+      if (isLengthFinishReason(finalStopReason)) {
+        const content = "Mari hit the model output limit. Ask her to continue and she can pick up from here.";
+        appendTraceStatus(workspaceTrace, content);
+        args.onEvent({ type: "status", data: { content, kind: "output_limit", level: "warning" } });
+      }
 
       if (finalText && finalText !== assistantText) {
         const missingText = finalText.startsWith(assistantText)
@@ -1021,7 +1086,7 @@ export class ProfessorMariWorkspaceService {
         const baseOptions: ChatOptions = {
           model: connection.model,
           temperature: typeof defaultParameters?.temperature === "number" ? defaultParameters.temperature : 0.2,
-          maxTokens: connection.maxTokensOverride ?? 8192,
+          maxTokens: resolveMariMaxOutputTokens(connection),
           maxContext: connection.maxContext,
           enableCaching: bool(connection.enableCaching),
           cachingAtDepth: connection.cachingAtDepth ?? 5,
@@ -1087,6 +1152,7 @@ export class ProfessorMariWorkspaceService {
         }
 
         if (result.content && !sawTextDelta) pushTextDelta(result.content);
+        if (isLengthFinishReason(result.finishReason)) output.stopReason = "length";
         finishText();
         emitToolCalls(result.toolCalls);
 

@@ -300,6 +300,14 @@ function appendThinkingTimeline(current: WorkspaceTimelineItem[], delta: string)
   return [...current, { id: timelineId("thinking"), type: "thinking", content: delta }];
 }
 
+function appendStatusTimeline(current: WorkspaceTimelineItem[], content: string): WorkspaceTimelineItem[] {
+  const trimmed = content.trim();
+  if (!trimmed) return current;
+  const last = current[current.length - 1];
+  if (last?.type === "status" && last.content === trimmed) return current;
+  return [...current, { id: timelineId("status"), type: "status", content: trimmed }];
+}
+
 function upsertToolTimeline(current: WorkspaceTimelineItem[], update: WorkspaceToolCall): WorkspaceTimelineItem[] {
   const existingIndex = current.findIndex((item) => item.type === "tool" && item.tool.id === update.id);
   if (existingIndex < 0) {
@@ -717,10 +725,11 @@ function getSkillReadPresentation(tool: WorkspaceToolCall): ToolPresentation | n
   const normalized = path.replace(/\\/g, "/").toLowerCase();
   if (!normalized.endsWith("/skill.md") && normalized !== "skill.md") return null;
   const professorMariSkill = normalized.includes("/.mari-workspace/skills/");
+  const skillName = skillNameFromPath(path);
   return {
-    eyebrow: "Skill",
-    title: "Loading " + skillNameFromPath(path),
-    detail: '',
+    eyebrow: professorMariSkill ? "Mari skill" : "Skill",
+    title: professorMariSkill ? "Loading Professor Mari skill" : `Loading ${skillName}`,
+    detail: professorMariSkill ? skillName : null,
     tone: "skill",
   };
 }
@@ -969,13 +978,42 @@ function WorkspaceToolEvent({ tool }: { tool: WorkspaceToolCall }) {
   );
 }
 
-function WorkspaceStatusEvent({ content }: { content: string }) {
+function WorkspaceStatusEvent({ content, active }: { content: string; active?: boolean }) {
+  const lower = content.toLowerCase();
+  const warning = /\b(failed|cancelled|limit|error|attention)\b/.test(lower);
+  const complete = /\b(compacted|completed|done)\b/.test(lower) && !/\b(compacting|retrying|working)\b/.test(lower);
+  const working = active && !warning && !complete;
+  const Icon = warning ? AlertTriangle : complete ? Check : working ? Loader2 : RefreshCw;
   return (
     <TranscriptRow
-      marker={<Loader2 size="0.78rem" className="mt-1 animate-spin text-[var(--primary)]" />}
+      marker={
+        <span
+          className={cn(
+            "mt-0.5 flex h-5 w-5 items-center justify-center rounded-md border bg-[var(--card)] shadow-sm",
+            warning
+              ? "border-amber-400/35 text-amber-300"
+              : complete
+                ? "border-emerald-400/25 text-emerald-300"
+                : "border-[var(--primary)]/25 text-[var(--primary)]",
+          )}
+        >
+          <Icon size="0.72rem" className={working ? "animate-spin" : undefined} />
+        </span>
+      }
       className="text-[0.7rem] text-[var(--muted-foreground)]"
     >
-      <span>{content}</span>
+      <span
+        className={cn(
+          "inline-flex max-w-full rounded-lg border px-2 py-1 leading-5 shadow-sm",
+          warning
+            ? "border-amber-400/20 bg-amber-400/10 text-amber-100"
+            : complete
+              ? "border-emerald-400/20 bg-emerald-400/10 text-[var(--foreground)]"
+              : "border-[var(--primary)]/20 bg-[var(--primary)]/10 text-[var(--foreground)]",
+        )}
+      >
+        {content}
+      </span>
     </TranscriptRow>
   );
 }
@@ -1004,7 +1042,7 @@ function WorkspaceTimelineEvent({
     );
   }
   if (item.type === "tool") return <WorkspaceToolEvent tool={item.tool} />;
-  return <WorkspaceStatusEvent content={item.content} />;
+  return <WorkspaceStatusEvent content={item.content} active={active} />;
 }
 
 function getActiveTimelineIndex(items: WorkspaceTimelineItem[], active: boolean) {
@@ -1013,6 +1051,7 @@ function getActiveTimelineIndex(items: WorkspaceTimelineItem[], active: boolean)
     const item = items[index];
     if (item.type === "tool" && item.tool.status === "running") return index;
     if ((item.type === "text" || item.type === "thinking") && item.content.trim()) return index;
+    if (item.type === "status" && item.content.trim()) return index;
   }
   return -1;
 }
@@ -1829,6 +1868,16 @@ export function HomeProfessorMariChat({ pageActive = true }: { pageActive?: bool
           } else if (event.type === "thinking" && typeof event.data === "string") {
             setWorkspaceTimeline((current) => appendThinkingTimeline(current, event.data as string));
             useChatStore.getState().appendThinkingBuffer(event.data, chat.id);
+          } else if (event.type === "status") {
+            const data = asRecord(event.data);
+            const content =
+              typeof event.data === "string"
+                ? event.data
+                : typeof data?.content === "string"
+                  ? data.content
+                  : "Working...";
+            setWorkspaceTimeline((current) => appendStatusTimeline(current, content));
+            setWorkspaceActivity(content);
           } else if (event.type === "tool_start") {
             const data = asRecord(event.data);
             const name = typeof data?.name === "string" ? data.name : "tool";
