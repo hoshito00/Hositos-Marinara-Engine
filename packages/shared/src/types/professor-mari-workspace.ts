@@ -26,6 +26,26 @@ export interface MariWorkspaceConnectionSummary {
   model: string;
 }
 
+export interface MariWorkspaceSkillSummary {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+  size: number;
+  filePath: string;
+}
+
+export interface MariWorkspaceSkillDetail extends MariWorkspaceSkillSummary {
+  content: string;
+}
+
+export interface MariWorkspaceSkillsResponse {
+  skills: MariWorkspaceSkillDetail[];
+  diagnostics: string[];
+}
+
 export interface MariDbValidationIssue {
   level: "error" | "notice" | "info";
   table?: string;
@@ -114,6 +134,8 @@ export interface MariWorkspaceStatus {
   tools: MariWorkspaceToolName[];
   dbAccess: "server-managed";
   connection: MariWorkspaceConnectionSummary | null;
+  skills: MariWorkspaceSkillSummary[];
+  skillDiagnostics: string[];
   active: boolean;
   pendingApprovals: MariDbPendingApproval[];
   history: MariDbHistoryEntry[];

@@ -58,6 +58,7 @@ import type {
   MariWorkspaceTraceItem,
 } from "@marinara-engine/shared";
 import { getMariDbService } from "../mari-db/mari-db.service.js";
+import { getProfessorMariWorkspaceSkillsService } from "./workspace-skills.service.js";
 
 type ConnectionWithKey = typeof apiConnections.$inferSelect & { apiKey: string };
 type PromptEventSink = (event: MariWorkspacePromptEvent) => void;
@@ -678,6 +679,10 @@ export class ProfessorMariWorkspaceService {
       this.lastError = err instanceof Error ? err.message : String(err);
       return null;
     });
+    const skillsResponse = await getProfessorMariWorkspaceSkillsService().list().catch((err) => {
+      this.lastError = err instanceof Error ? err.message : String(err);
+      return { skills: [], diagnostics: [this.lastError ?? "Professor Mari skills unavailable"] };
+    });
     return {
       enabled: this.enabled,
       piAvailable: true,
@@ -686,6 +691,8 @@ export class ProfessorMariWorkspaceService {
       tools: WORKSPACE_TOOLS,
       dbAccess: "server-managed",
       connection: connectionSummary(connection),
+      skills: skillsResponse.skills.map(({ content: _content, ...summary }) => summary),
+      skillDiagnostics: skillsResponse.diagnostics,
       active: Boolean(this.session?.isStreaming),
       pendingApprovals: getMariDbService(this.app.db).getPendingApprovals(),
       history: await getMariDbService(this.app.db).getHistory(),
@@ -860,6 +867,7 @@ export class ProfessorMariWorkspaceService {
     authStorage.setRuntimeApiKey(MARINARA_PROVIDER, RUNTIME_API_KEY);
     const modelRegistry = ModelRegistry.inMemory(authStorage);
     const model = createPiModel(connection);
+    const skillResult = await getProfessorMariWorkspaceSkillsService().loadPiSkills();
     const loader = new DefaultResourceLoader({
       cwd: this.workspaceRoot,
       agentDir: join(DATA_DIR, ".mari-workspace", "pi-agent"),
@@ -872,7 +880,7 @@ export class ProfessorMariWorkspaceService {
       systemPromptOverride: () => MARI_SYSTEM_PROMPT,
       appendSystemPromptOverride: () => [],
       agentsFilesOverride: () => ({ agentsFiles: [] }),
-      skillsOverride: () => ({ skills: [], diagnostics: [] }),
+      skillsOverride: () => skillResult,
       extensionFactories: [
         (pi: any) => {
           const bashTool = createBashTool(this.workspaceRoot, {
