@@ -93,30 +93,41 @@ const MARINARA_MODEL = "current-connection";
 const MARINARA_API = "marinara-chat";
 const RUNTIME_API_KEY = "local-marinara-runtime";
 const SESSION_ID = "professor-mari-workspace";
-const NATIVE_TOOL_PROVIDERS = new Set([
-  "openai",
-  "openrouter",
-  "nanogpt",
-  "xai",
-  "mistral",
-  "cohere",
-  "anthropic",
-  "google",
-  "google_vertex",
-]);
-const JSON_RESPONSE_FORMAT_PROVIDERS = new Set([
-  "openai",
-  "openrouter",
-  "nanogpt",
-  "xai",
-  "mistral",
-  "cohere",
-  "google",
-  "google_vertex",
-  "custom",
-  "local_sidecar",
-]);
+const JSON_RESPONSE_FORMAT_PROVIDERS = new Set(["custom", "local_sidecar"]);
 
+function isPrivateOrLoopbackHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (
+    host === "localhost" ||
+    host === "host.docker.internal" ||
+    host === "host.containers.internal" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    (!host.includes(".") && !host.includes(":"))
+  ) {
+    return true;
+  }
+  if (host === "::" || host === "::1" || host === "0:0:0:0:0:0:0:0" || host === "0:0:0:0:0:0:0:1") return true;
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const a = Number.parseInt(ipv4[1] ?? "", 10);
+    const b = Number.parseInt(ipv4[2] ?? "", 10);
+    if (a === 0 || a === 10 || a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+  }
+  return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80");
+}
+
+function isProbablyLocalEndpoint(baseUrl: string | null | undefined): boolean {
+  if (!baseUrl) return false;
+  try {
+    return isPrivateOrLoopbackHostname(new URL(baseUrl).hostname);
+  } catch {
+    return false;
+  }
+}
 
 function getPathEnvKey(env: NodeJS.ProcessEnv) {
   return Object.keys(env).find((key) => key.toLowerCase() === "path") ?? "PATH";
@@ -428,16 +439,23 @@ function isLocalSidecarConnection(connection: WorkspaceConnection): boolean {
   return connection.isLocalSidecar === true || connection.id === LOCAL_SIDECAR_CONNECTION_ID;
 }
 
-function hasUncertainNativeToolSupport(connection: WorkspaceConnection): boolean {
-  return isLocalSidecarConnection(connection) || connection.provider === "custom";
+function isLocalCustomOpenAIConnection(connection: WorkspaceConnection): boolean {
+  return connection.provider === "custom" && isProbablyLocalEndpoint(connection.baseUrl);
 }
 
-function providerSupportsNativeTools(connection: WorkspaceConnection, tools?: LLMToolDefinition[]): boolean {
-  if (!tools?.length) return false;
-  // Custom/OAI-compatible endpoints and the sidecar may support native OpenAI tools
-  // (LM Studio, Ollama, llama.cpp, hosted routers), so try native first. They are
-  // handled non-streaming so bad text tool attempts do not leak into chat.
-  return hasUncertainNativeToolSupport(connection) || NATIVE_TOOL_PROVIDERS.has(connection.provider);
+function shouldUseGuardedNativeToolAttempt(connection: WorkspaceConnection): boolean {
+  return isLocalSidecarConnection(connection) || isLocalCustomOpenAIConnection(connection);
+}
+
+function canFallbackToJsonToolProtocol(connection: WorkspaceConnection): boolean {
+  return shouldUseGuardedNativeToolAttempt(connection);
+}
+
+function providerSupportsNativeTools(_connection: WorkspaceConnection, tools?: LLMToolDefinition[]): boolean {
+  // Always attempt provider-native tool calls first. Hosted connections never use
+  // the JSON prompt fallback; local sidecar/custom endpoints may fall back only
+  // after native tools fail or fake a tool call in text.
+  return !!tools?.length;
 }
 
 function providerSupportsJsonResponseFormat(connection: WorkspaceConnection): boolean {
@@ -893,8 +911,8 @@ function buildJsonToolRepairMessages(
   ];
 }
 
-function requiresStrictToolProtocol(_connection: WorkspaceConnection): boolean {
-  return true;
+function requiresStrictToolProtocol(connection: WorkspaceConnection): boolean {
+  return canFallbackToJsonToolProtocol(connection);
 }
 
 function emptyUsage(): AssistantMessage["usage"] {
@@ -1399,6 +1417,9 @@ export class ProfessorMariWorkspaceService {
           onThinking: pushThinkingDelta,
         };
         const runJsonToolFallback = async (invalidNativeResponse?: string | null): Promise<ChatCompletionResult> => {
+          if (!canFallbackToJsonToolProtocol(connection)) {
+            throw new Error("JSON tool fallback is disabled for hosted Professor Mari connections.");
+          }
           if (!tools?.length) {
             return provider.chatComplete(messages, { ...baseOptions, stream: true, onToken: pushTextDelta });
           }
@@ -1484,15 +1505,16 @@ export class ProfessorMariWorkspaceService {
 
         let result: ChatCompletionResult;
         if (providerSupportsNativeTools(connection, tools)) {
+          const allowJsonFallback = canFallbackToJsonToolProtocol(connection);
           try {
-            if (hasUncertainNativeToolSupport(connection)) {
+            if (shouldUseGuardedNativeToolAttempt(connection)) {
               const nativeResult = await provider.chatComplete(messages, {
                 ...baseOptions,
                 stream: false,
                 tools,
               });
               result = normalizeTextToolProtocolResult(nativeResult, tools ?? []) ?? nativeResult;
-              if (!result.toolCalls.length && shouldFallbackFromNativeText(messages, result.content)) {
+              if (allowJsonFallback && !result.toolCalls.length && shouldFallbackFromNativeText(messages, result.content)) {
                 result = await runJsonToolFallback(result.content);
               }
             } else {
@@ -1504,16 +1526,14 @@ export class ProfessorMariWorkspaceService {
               });
             }
           } catch (err) {
-            if (!tools?.length || sawTextDelta || !isNativeToolUnsupportedError(err)) throw err;
+            if (!tools?.length || sawTextDelta || !isNativeToolUnsupportedError(err) || !allowJsonFallback) throw err;
             logger.info(
-              "[Professor Mari] Native tools unavailable for provider=%s model=%s; falling back to JSON tool protocol",
+              "[Professor Mari] Native tools unavailable for local provider=%s model=%s; falling back to JSON tool protocol",
               connection.provider,
               connection.model,
             );
             result = await runJsonToolFallback();
           }
-        } else if (tools?.length) {
-          result = await runJsonToolFallback();
         } else {
           result = await provider.chatComplete(messages, { ...baseOptions, stream: true, onToken: pushTextDelta });
         }
