@@ -441,7 +441,7 @@ export function ConversationPresenceCard({
     "flex h-5 w-5 items-center justify-center rounded-full bg-[var(--foreground)]/10 text-[0.5rem] font-bold text-[var(--foreground)]/70 ring-1 ring-[var(--border)]/80 max-md:h-6 max-md:w-6 max-md:text-[0.5625rem]";
   const title = characters.map((c) => `${c.name}: ${c.activity || statusLabel(c.status)}`).join(", ");
 
-  const saveOverride = async (characterId: string, status: ConversationPresenceStatus, activity?: string | null) => {
+  const saveOverride = async (characterId: string, status: ConversationPresenceStatus, activity?: string | null): Promise<boolean> => {
     setPendingStatuses((current) => ({ ...current, [characterId]: status }));
     try {
       await updateMeta.mutateAsync({
@@ -453,7 +453,13 @@ export function ConversationPresenceCard({
           expiresAt: null,
         }),
       });
-      void statusesQuery.refetch();
+      await statusesQuery.refetch();
+      setPendingStatuses((current) => {
+        const next = { ...current };
+        delete next[characterId];
+        return next;
+      });
+      return true;
     } catch (error) {
       setPendingStatuses((current) => {
         const next = { ...current };
@@ -461,6 +467,7 @@ export function ConversationPresenceCard({
         return next;
       });
       toast.error(error instanceof Error ? error.message : "Failed to save presence override");
+      return false;
     }
   };
 
@@ -516,9 +523,11 @@ export function ConversationPresenceCard({
       return;
     }
 
-    await saveOverride(character.id, character.status, nextActivity);
-    setEditingCharacterId(null);
-    setDraftActivity("");
+    const ok = await saveOverride(character.id, character.status, nextActivity);
+    if (ok) {
+      setEditingCharacterId(null);
+      setDraftActivity("");
+    }
   };
 
   const selectStatus = async (character: (typeof characters)[number], status: ConversationPresenceStatus) => {
@@ -530,8 +539,8 @@ export function ConversationPresenceCard({
       return;
     }
 
-    await saveOverride(character.id, status, nextActivity);
-    setStatusMenuCharacterId(null);
+    const ok = await saveOverride(character.id, status, nextActivity);
+    if (ok) setStatusMenuCharacterId(null);
   };
 
   const restoreSchedule = async (characterId: string) => {

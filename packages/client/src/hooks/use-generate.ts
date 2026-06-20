@@ -901,7 +901,6 @@ export function useGenerate() {
       regenerateMessageId?: string;
       impersonate?: boolean;
       autonomous?: boolean;
-      autonomousIntent?: string;
       autonomousIntentKey?: string;
       attachments?: Array<{ type: string; data: string; filename?: string; name?: string }>;
       mentionedCharacterNames?: string[];

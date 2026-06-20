@@ -4,7 +4,7 @@
 import { create } from "zustand";
 import type { AvatarCropValue } from "../lib/utils";
 import { subscribeWithSelector } from "zustand/middleware";
-import type { Chat, ChatMode, Message } from "@marinara-engine/shared";
+import type { Chat, ChatMode, ConversationPresenceStatus, Message } from "@marinara-engine/shared";
 import { useAgentStore } from "./agent.store";
 import { useGameStateStore } from "./game-state.store";
 
@@ -13,7 +13,7 @@ const DRAFTS_KEY = "marinara-input-drafts";
 
 type NotificationAvatarCrop = AvatarCropValue | null;
 
-type DelayedCharacterStatus = "online" | "idle" | "dnd" | "offline";
+type DelayedCharacterStatus = ConversationPresenceStatus;
 
 export type DelayedCharacterInfo = {
   name: string;

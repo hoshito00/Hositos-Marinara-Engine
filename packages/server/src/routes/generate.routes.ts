@@ -141,7 +141,7 @@ import {
   recordAssistantActivity,
   recordUserActivity,
 } from "../services/conversation/autonomous.service.js";
-import { buildIntentCooldownPatch, isMessageIntent } from "../services/conversation/intent.service.js";
+import { buildIntentCooldownPatch, getIntentHint, isMessageIntent } from "../services/conversation/intent.service.js";
 import { buildImpersonateInstruction } from "../services/conversation/impersonate-prompt.js";
 import { stripConversationPromptTimestamps } from "../services/conversation/transcript-sanitize.js";
 import {
@@ -2866,7 +2866,7 @@ export async function generateRoutes(app: FastifyInstance) {
             latestVisiblePromptTurn?.role === "assistant" && !input.userMessage?.trim()
               ? `No new message from ${personaName} was sent in this request; this is a proactive/autonomous turn. Do not write ${personaName}'s side of the conversation.`
               : null;
-          const intentHint = (input.autonomousIntent ?? "").trim();
+          const intentHint = isMessageIntent(input.autonomousIntentKey) ? getIntentHint(input.autonomousIntentKey) : "";
 
           const contextBlock = [
             `<context>`,

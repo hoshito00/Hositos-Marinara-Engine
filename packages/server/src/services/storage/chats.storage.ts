@@ -85,6 +85,7 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 function mergeConversationStatusOverrides(current: unknown, incoming: unknown): unknown {
   if (incoming === null) return null;
   if (incoming === undefined) return current;
+  if (isPlainRecord(current) && isPlainRecord(incoming)) return { ...current, ...incoming };
   return incoming;
 }
 

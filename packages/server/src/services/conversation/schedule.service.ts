@@ -324,7 +324,7 @@ export function getActiveStatusOverride(
   if (!override || !isManualPresenceStatus(override.status)) return null;
   if (override.expiresAt) {
     const expiresAt = new Date(override.expiresAt).getTime();
-    if (Number.isFinite(expiresAt) && expiresAt <= now.getTime()) return null;
+    if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) return null;
   }
   return override;
 }
@@ -502,10 +502,11 @@ export function getAdjacentBlocks(
         currentIndex = i;
         break;
       }
-      if (endsBeforeCurrentTime(start, end)) {
+      // Daytime gap for a midnight-crossing block: it ended this morning and starts tonight.
+      // Treat it as both previous (most recent ended block) and next (upcoming tonight).
+      if (end <= currentMinutes && currentMinutes < start) {
         previousIndex = i;
-      } else if (nextIndex === -1 && startsAfterCurrentTime(start, end)) {
-        nextIndex = i;
+        if (nextIndex === -1) nextIndex = i;
       }
     }
   }

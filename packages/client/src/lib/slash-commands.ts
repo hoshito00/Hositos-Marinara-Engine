@@ -567,10 +567,7 @@ const COMMANDS: SlashCommand[] = [
         return { handled: true, feedback: "/status is only available in conversation mode." };
       }
 
-      const characters =
-        ctx.characters && ctx.characters.length > 0
-          ? ctx.characters
-          : ctx.characterNames.map((name) => ({ id: name, name }));
+      const characters = ctx.characters ?? [];
       if (characters.length === 0) {
         return { handled: true, feedback: "No characters found in this chat." };
       }

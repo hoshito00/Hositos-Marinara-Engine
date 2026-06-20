@@ -73,7 +73,14 @@ export function resolveIntent(
   }
 
   if (next && next.status === "offline" && blockDurationMinutes(next) >= 360) {
-    return "good_night";
+    const [startStr] = next.time.split("-");
+    if (startStr) {
+      const [sh, sm] = startStr.split(":").map(Number);
+      const nextStartMinutes = (sh ?? 0) * 60 + (sm ?? 0);
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const minutesUntilNext = (nextStartMinutes - currentMinutes + 1440) % 1440;
+      if (minutesUntilNext <= 90) return "good_night";
+    }
   }
 
   if (hasStatus(previous, "dnd") && (current?.status === "online" || current?.status === "idle")) {

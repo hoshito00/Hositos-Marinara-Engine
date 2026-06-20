@@ -163,12 +163,12 @@ export function useAutonomousMessaging(
                 schedulePoll();
                 return;
               }
-              triggerAutonomousGeneration(characterId, result.autonomousIntent, result.autonomousIntentKey);
+              triggerAutonomousGeneration(characterId, result.autonomousIntentKey, true);
             }, delay.delayMs);
             return; // Don't schedule next poll until generation completes
           }
 
-          await triggerAutonomousGeneration(characterId, result.autonomousIntent, result.autonomousIntentKey);
+          await triggerAutonomousGeneration(characterId, result.autonomousIntentKey);
           return; // Generation will schedule next poll when done
         }
       } catch {
@@ -180,8 +180,8 @@ export function useAutonomousMessaging(
 
     const triggerAutonomousGeneration = async (
       characterId: string,
-      autonomousIntent?: string,
       autonomousIntentKey?: string,
+      skipPresenceDelay?: boolean,
     ) => {
       generatingRef.current = true;
       let produced: boolean | undefined = false;
@@ -192,8 +192,8 @@ export function useAutonomousMessaging(
           connectionId: null,
           forCharacterId: characterId,
           autonomous: true,
-          autonomousIntent,
           autonomousIntentKey,
+          skipPresenceDelay,
         });
         if (produced) {
           // Re-sort sidebar so this chat floats to the top

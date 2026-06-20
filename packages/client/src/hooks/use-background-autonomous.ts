@@ -171,8 +171,8 @@ export function useBackgroundAutonomousPolling() {
                   connectionId: null,
                   forCharacterId: characterId,
                   autonomous: true,
-                  autonomousIntent: result.autonomousIntent,
                   autonomousIntentKey: result.autonomousIntentKey,
+                  skipPresenceDelay: true,
                   streaming: useUIStore.getState().enableStreaming,
                 })) {
                   if ((_event as { type: string }).type === "token") receivedTokens = true;

@@ -7,7 +7,6 @@ import {
   getRecentAutonomousClientPresence,
 } from "./autonomous.service.js";
 import {
-  getIntentHint,
   isIntentOnCooldown,
   resolveIntent,
   type MessageIntent,
@@ -121,8 +120,6 @@ export function startServerAutonomousScheduler(app: FastifyInstance) {
       clearGenerationInProgress(chatId, claimedAt);
       return false;
     }
-    const autonomousIntent = intent ? getIntentHint(intent) : "";
-
     const response = await app.inject({
       method: "POST",
       url: "/api/generate",
@@ -136,7 +133,6 @@ export function startServerAutonomousScheduler(app: FastifyInstance) {
         autonomous: true,
         skipPresenceDelay: true,
         autonomousIntentKey: intent ?? "",
-        autonomousIntent,
       },
     });
 
@@ -158,10 +154,12 @@ export function startServerAutonomousScheduler(app: FastifyInstance) {
 
     const result = parseSsePayload(response.payload);
     if (result.error) {
+      clearGenerationInProgress(chatId, claimedAt);
       logger.warn("[autonomous-scheduler] Generate failed for chat %s: %s", chatId, result.error);
       return false;
     }
     if (!result.done) {
+      clearGenerationInProgress(chatId, claimedAt);
       logger.warn("[autonomous-scheduler] Generate ended without a done event for chat %s", chatId);
       return false;
     }
@@ -216,6 +214,10 @@ export function startServerAutonomousScheduler(app: FastifyInstance) {
 
       if (schedule) {
         const { status } = getEffectiveCurrentStatus(schedule, statusOverrides[characterId]);
+        if (status === "offline") {
+          clearGenerationInProgress(chat.id, generationStartedAt);
+          return;
+        }
         const delayMs = getBusyDelay(status, schedule);
         if (delayMs > 0) {
           await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
