@@ -34,6 +34,24 @@ type GameStateUpdateFields = Partial<
   >
 >;
 
+type LockMigrationStateSource = {
+  id?: unknown;
+  chatId?: unknown;
+  messageId?: unknown;
+  swipeIndex?: unknown;
+  date?: unknown;
+  time?: unknown;
+  location?: unknown;
+  weather?: unknown;
+  temperature?: unknown;
+  presentCharacters?: unknown;
+  recentEvents?: unknown;
+  playerStats?: unknown;
+  personaStats?: unknown;
+  fieldLocks?: unknown;
+  createdAt?: unknown;
+};
+
 function coerceSnapshotTextFields(fields: Partial<Pick<GameState, (typeof MANUAL_OVERRIDE_FIELDS)[number]>>) {
   return {
     date: coerceGameStateTextValue(fields.date),
@@ -79,9 +97,7 @@ function parseSnapshotJson<T>(value: unknown, fallback: T): T {
   return value == null ? fallback : (value as T);
 }
 
-function buildLockMigrationState(
-  row: Partial<typeof gameStateSnapshots.$inferSelect> & { chatId?: string; messageId?: string; swipeIndex?: number },
-): GameState {
+function buildLockMigrationState(row: LockMigrationStateSource): GameState {
   return {
     id: typeof row.id === "string" ? row.id : "",
     chatId: typeof row.chatId === "string" ? row.chatId : "",
@@ -457,7 +473,9 @@ export function createGameStateStorage(db: DB) {
       if (fields.fieldLocks !== undefined) {
         updates.fieldLocks = serializeFieldLocks(normalizeTrackerFieldLocksForState(fields.fieldLocks, lockMigrationState));
       } else if (row.fieldLocks) {
-        updates.fieldLocks = serializeFieldLocks(normalizeTrackerFieldLocksForState(row.fieldLocks, lockMigrationState));
+        updates.fieldLocks = serializeFieldLocks(
+          normalizeTrackerFieldLocksForState(parseTrackerFieldLocks(row.fieldLocks), lockMigrationState),
+        );
       }
 
       if (Object.keys(updates).length === 0) return row;

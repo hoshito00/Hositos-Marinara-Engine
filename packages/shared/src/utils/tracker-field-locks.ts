@@ -42,7 +42,7 @@ function normalizeComparableText(value: unknown) {
 }
 
 function stableIndexRef(index: number | null | undefined) {
-  return Number.isSafeInteger(index) && index >= 0 ? index : 0;
+  return typeof index === "number" && Number.isSafeInteger(index) && index >= 0 ? index : 0;
 }
 
 function namedRowLockRef(rowOrIndex: NamedLockRow | number | null | undefined, index?: number) {

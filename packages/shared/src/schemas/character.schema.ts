@@ -9,6 +9,24 @@ export const depthPromptSchema = z.object({
   role: z.enum(["system", "user", "assistant"]).default("system"),
 });
 
+const characterBookPositionSchema = z.union([
+  z.enum(["before_char", "after_char", "at_depth", "depth"]),
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+  z.literal(6),
+]);
+
+const characterBookRoleSchema = z.union([
+  z.enum(["system", "user", "assistant"]),
+  z.literal(0),
+  z.literal(1),
+  z.literal(2),
+]);
+
 export const characterExtensionsSchema = z
   .object({
     talkativeness: z.number().min(0).max(1).default(0.5),
@@ -35,15 +53,9 @@ export const characterBookEntrySchema = z
     selective: z.boolean().default(false),
     secondary_keys: z.array(z.string()).default([]),
     constant: z.boolean().default(false),
-    position: z
-      .union([
-        z.enum(["before_char", "after_char", "at_depth", "depth"]),
-        z.number().int().min(0).max(6),
-      ])
-      .catch("before_char")
-      .default("before_char"),
+    position: characterBookPositionSchema.catch("before_char").default("before_char"),
     depth: z.number().optional(),
-    role: z.union([z.enum(["system", "user", "assistant"]), z.number().int().min(0).max(2)]).optional(),
+    role: characterBookRoleSchema.optional(),
   })
   .passthrough();
 

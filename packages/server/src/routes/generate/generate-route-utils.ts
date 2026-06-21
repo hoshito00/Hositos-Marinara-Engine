@@ -1046,7 +1046,7 @@ export function parseGameStateRow(row: Record<string, unknown>): GameState {
     temperature: row.temperature as string | null,
     presentCharacters: parseJsonField<any[]>(row.presentCharacters, []),
     recentEvents: parseJsonField<string[]>(row.recentEvents, []),
-    playerStats: parseJsonField<Record<string, unknown> | null>(row.playerStats, null),
+    playerStats: parseJsonField<PlayerStats | null>(row.playerStats, null),
     personaStats: parseJsonField<any[] | null>(row.personaStats, null),
     manualOverrides,
     fieldLocks,

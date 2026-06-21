@@ -5,6 +5,7 @@ import type { FastifyInstance } from "fastify";
 import { existsSync } from "fs";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { extname, join } from "path";
+import { logger } from "../lib/logger.js";
 import {
   createLorebookSchema,
   updateLorebookSchema,

@@ -46,6 +46,10 @@ function formatStatValue(value: unknown, max: unknown): string {
   return maxText ? `${valueText}/${maxText}` : valueText;
 }
 
+function isNonEmptyLine(line: string | null): line is string {
+  return !!line;
+}
+
 function formatStatLine(stat: any): string | null {
   const name = asText(stat?.name);
   if (!name) return null;
@@ -72,7 +76,7 @@ function formatCharacterLine(character: any): string | null {
   if (character.outfit) details.push(`outfit: ${character.outfit}`);
   if (character.thoughts) details.push(`thoughts: ${character.thoughts}`);
   if (Array.isArray(character.stats) && character.stats.length > 0) {
-    const statStr = character.stats.map(formatStatSummary).filter((line): line is string => !!line).join(", ");
+    const statStr = (character.stats as unknown[]).map(formatStatSummary).filter(isNonEmptyLine).join(", ");
     if (statStr) details.push(`stats: ${statStr}`);
   }
 
@@ -87,10 +91,10 @@ function formatQuestLine(quest: any): string | null {
   const objectives = Array.isArray(quest.objectives)
     ? quest.objectives
         .map((objective: any) => {
-          const text = asText(objective?.text);
-          return text ? `  ${objective.completed ? "[x]" : "[ ]"} ${text}` : null;
-        })
-        .filter((line): line is string => !!line)
+      const text = asText(objective?.text);
+      return text ? `  ${objective.completed ? "[x]" : "[ ]"} ${text}` : null;
+    })
+        .filter(isNonEmptyLine)
         .join("\n")
     : "";
   return `- ${name}${objectives ? "\n" + objectives : ""}`;
@@ -139,7 +143,7 @@ export function buildCommittedTrackerContextBlock(args: {
   if (hasCharTracker) {
     const presentChars = parseMaybeJson(snap.presentCharacters);
     if (Array.isArray(presentChars) && presentChars.length > 0) {
-      const charLines = presentChars.map(formatCharacterLine).filter((line): line is string => !!line);
+      const charLines = presentChars.map(formatCharacterLine).filter(isNonEmptyLine);
       if (charLines.length > 0) trackerParts.push(wrapContent(charLines.join("\n"), "Present Characters", args.wrapFormat));
     }
   }
@@ -147,7 +151,7 @@ export function buildCommittedTrackerContextBlock(args: {
   if (hasPersonaStats && snap.personaStats) {
     const psBars = parseMaybeJson(snap.personaStats);
     if (Array.isArray(psBars) && psBars.length > 0) {
-      const barLines = psBars.map(formatStatLine).filter((line): line is string => !!line);
+      const barLines = psBars.map(formatStatLine).filter(isNonEmptyLine);
       if (barLines.length > 0) trackerParts.push(wrapContent(barLines.join("\n"), "Persona Stats", args.wrapFormat));
     }
   }
@@ -161,19 +165,19 @@ export function buildCommittedTrackerContextBlock(args: {
 
       if (hasQuest && Array.isArray(stats.activeQuests) && stats.activeQuests.length > 0) {
         const activeQuestsForContext = compactQuestProgressForContext(stats.activeQuests);
-        const questLines = activeQuestsForContext.map(formatQuestLine).filter((line): line is string => !!line);
+        const questLines = activeQuestsForContext.map(formatQuestLine).filter(isNonEmptyLine);
         if (questLines.length > 0) {
           trackerParts.push(wrapContent(questLines.join("\n"), "Active Quests", args.wrapFormat));
         }
       }
 
       if (hasPersonaStats && Array.isArray(stats.inventory) && stats.inventory.length > 0) {
-        const invLines = stats.inventory.map(formatInventoryLine).filter((line): line is string => !!line);
+        const invLines = (stats.inventory as unknown[]).map(formatInventoryLine).filter(isNonEmptyLine);
         if (invLines.length > 0) trackerParts.push(wrapContent(invLines.join("\n"), "Inventory", args.wrapFormat));
       }
 
       if (hasPersonaStats && Array.isArray(stats.stats) && stats.stats.length > 0) {
-        const statLines = stats.stats.map(formatStatLine).filter((line): line is string => !!line);
+        const statLines = (stats.stats as unknown[]).map(formatStatLine).filter(isNonEmptyLine);
         if (statLines.length > 0) trackerParts.push(wrapContent(statLines.join("\n"), "Stats", args.wrapFormat));
       }
 

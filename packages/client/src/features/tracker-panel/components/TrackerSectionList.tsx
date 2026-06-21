@@ -120,6 +120,7 @@ export function TrackerSectionList({
     updateQuest,
   } = useTrackerMutations({
     activeChatId,
+    customFields,
     inventory,
     personaStats,
     presentCharacters,

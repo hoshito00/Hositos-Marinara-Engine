@@ -43,13 +43,13 @@ function shallowRecordEqual(left: unknown, right: unknown) {
 
 function mergeChangedRecord<T extends Record<string, unknown>>(live: T, rendered: T | undefined, updated: T): T {
   if (!rendered) return updated;
-  const merged = { ...live };
+  const merged: Record<string, unknown> = { ...live };
   for (const key of Object.keys(updated)) {
     if (!Object.is(updated[key], rendered[key])) {
       merged[key] = updated[key];
     }
   }
-  return merged;
+  return merged as T;
 }
 
 function findUniqueNamedIndex<T extends { name?: string }>(items: T[], item: T | undefined) {
@@ -107,6 +107,7 @@ function reconcileListUpdate<T extends { name?: string }>(liveItems: T[], render
 
 export function useTrackerMutations({
   activeChatId,
+  customFields,
   inventory,
   personaStats,
   presentCharacters,
@@ -116,6 +117,7 @@ export function useTrackerMutations({
   removeFeaturedCharacterCard,
 }: {
   activeChatId: string | null;
+  customFields: CustomTrackerField[];
   inventory: InventoryItem[];
   personaStats: CharacterStat[];
   presentCharacters: PresentCharacter[];

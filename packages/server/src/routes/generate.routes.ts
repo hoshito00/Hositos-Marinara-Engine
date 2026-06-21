@@ -7842,7 +7842,7 @@ export async function generateRoutes(app: FastifyInstance) {
                 // them with authoritative data in their own handler blocks below.
                 const snapshotChars = parseJsonField<any[]>(prevSnap?.presentCharacters, []);
                 const snapshotPersonaStats = parseJsonField<any[] | null>(prevSnap?.personaStats, null);
-                const snapshotPlayerStats = parseJsonField<Record<string, unknown> | null>(prevSnap?.playerStats, null);
+                const snapshotPlayerStats = parseJsonField<PlayerStats | null>(prevSnap?.playerStats, null);
                 const currentGameStateForLocks = prevSnap
                   ? parseGameStateRow(prevSnap as Record<string, unknown>)
                   : null;
@@ -8222,7 +8222,7 @@ export async function generateRoutes(app: FastifyInstance) {
                 const hasStatus = typeof psData.status === "string";
                 const hasInventory = Array.isArray(psData.inventory);
                 const bars = hasStats ? (psData.stats as any[]) : [];
-                const status = hasStatus ? psData.status : "";
+                const status = hasStatus ? (psData.status as string) : "";
                 const inventory = hasInventory ? (psData.inventory as any[]) : [];
 
                 // Ensure a snapshot exists for this (messageId, swipeIndex).
