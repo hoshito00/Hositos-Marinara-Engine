@@ -2564,8 +2564,8 @@ export function ChatSettingsDrawer({
     );
   };
 
-  const renderCustomAgentPicker = () => {
-    if (customAgents.length === 0) return null;
+  const renderCustomAgentPicker = ({ showWhenEmpty = false }: { showWhenEmpty?: boolean } = {}) => {
+    if (customAgents.length === 0 && !showWhenEmpty) return null;
     return (
       <AgentCategorySection
         label="Custom Agents"
@@ -2590,6 +2590,25 @@ export function ChatSettingsDrawer({
                 </div>
               </button>
             ))}
+          </div>
+        ) : customAgents.length === 0 ? (
+          <div className="space-y-2 px-1">
+            <p className="text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]">
+              No custom agents are available yet. Create one in the Agents panel, then attach it to this game here.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                const ui = useUIStore.getState();
+                ui.openRightPanel("agents");
+                ui.openAgentDetail("__new__");
+              }}
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[var(--secondary)] px-3 py-2 text-[0.6875rem] font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
+            >
+              <Plus size="0.75rem" />
+              Create Custom Agent
+            </button>
           </div>
         ) : (
           <p className="px-1 text-[0.625rem] text-[var(--muted-foreground)]">
@@ -4866,7 +4885,6 @@ export function ChatSettingsDrawer({
                     />
                   </div>
                 </button>
-                {isGame && renderCustomAgentPicker()}
                 <AgentSettingsToggle
                   label="Review Agent Outputs"
                   description={
@@ -6368,6 +6386,7 @@ export function ChatSettingsDrawer({
                     )}
                   </>
                 )}
+                {isGame && renderCustomAgentPicker({ showWhenEmpty: true })}
               </div>
             </Section>
           )}
