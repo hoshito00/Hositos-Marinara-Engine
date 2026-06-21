@@ -390,7 +390,10 @@ function appendPromptMessageContent(target: PromptRoleMessage, source: PromptRol
     target.files = [...(target.files ?? []), ...source.files.map((file) => ({ ...file }))];
   }
   if (source.providerMetadata) {
-    target.providerMetadata = { ...source.providerMetadata };
+    target.providerMetadata = {
+      ...(target.providerMetadata ?? {}),
+      ...source.providerMetadata,
+    };
   }
 }
 
