@@ -28,6 +28,7 @@ import {
   type TimestampOverrides,
 } from "../import/import-timestamps.js";
 import { scheduleNeedsRefresh, type CharacterSchedules, type WeekSchedule } from "../conversation/schedule.service.js";
+import { logger } from "../../lib/logger.js";
 
 const GALLERY_DIR = join(DATA_DIR, "gallery");
 
@@ -901,28 +902,51 @@ export function createChatsStorage(db: DB) {
 
       const seen = new Set<string>();
       const flipped: string[] = [];
-      for (const row of scopedRows) {
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        // State read immediately before the write — the moment-of-mutation truth
-        // that decides whether THIS call flips the message into the target state.
-        let wasHidden = false;
-        try {
-          const parsed = typeof row.extra === "string" ? JSON.parse(row.extra) : (row.extra ?? {});
-          wasHidden = (parsed as { hiddenFromAI?: unknown } | null)?.hiddenFromAI === true;
-        } catch {
-          wasHidden = false;
+      try {
+        for (const row of scopedRows) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          // State read immediately before the write — the moment-of-mutation truth
+          // that decides whether THIS call flips the message into the target state.
+          let wasHidden = false;
+          try {
+            const parsed = typeof row.extra === "string" ? JSON.parse(row.extra) : (row.extra ?? {});
+            wasHidden = (parsed as { hiddenFromAI?: unknown } | null)?.hiddenFromAI === true;
+          } catch {
+            wasHidden = false;
+          }
+          await this.updateMessageExtra(row.id, { hiddenFromAI: hidden });
+          // Mirror what the single-message /extra route does: propagate the flag to
+          // all swipe rows so setActiveSwipe() cannot clobber it. Done for every
+          // scoped row (idempotent when already in the target state) so swipe
+          // consistency never depends on whether the main row happened to flip.
+          const swipes = await this.getSwipes(row.id);
+          for (const swipe of swipes) {
+            await this.updateSwipeExtra(row.id, swipe.index, { hiddenFromAI: hidden });
+          }
+          if (wasHidden !== hidden) flipped.push(row.id);
         }
-        await this.updateMessageExtra(row.id, { hiddenFromAI: hidden });
-        // Mirror what the single-message /extra route does: propagate the flag to
-        // all swipe rows so setActiveSwipe() cannot clobber it. Done for every
-        // scoped row (idempotent when already in the target state) so swipe
-        // consistency never depends on whether the main row happened to flip.
-        const swipes = await this.getSwipes(row.id);
-        for (const swipe of swipes) {
-          await this.updateSwipeExtra(row.id, swipe.index, { hiddenFromAI: hidden });
+      } catch (err) {
+        // A write failed partway through. The rows we did not reach are untouched,
+        // and rows already in the target state were never flipped, so the only
+        // partial state is the `flipped` set. Undo exactly those so the call is
+        // all-or-nothing and a caller never records ownership of a half-applied
+        // batch. (db.transaction() is intentionally avoided in this store — see the
+        // bulk-insert note re: the libSQL stateful-transaction crash #73 — so this
+        // compensating undo is the atomicity mechanism.) The original error is
+        // always rethrown; an undo failure is logged, never allowed to mask it.
+        for (const id of flipped) {
+          try {
+            await this.updateMessageExtra(id, { hiddenFromAI: !hidden });
+            const swipes = await this.getSwipes(id);
+            for (const swipe of swipes) {
+              await this.updateSwipeExtra(id, swipe.index, { hiddenFromAI: !hidden });
+            }
+          } catch (undoErr) {
+            logger.error(undoErr, "bulkSetHiddenFromAI: failed to undo partial hide for message %s", id);
+          }
         }
-        if (wasHidden !== hidden) flipped.push(row.id);
+        throw err;
       }
       return flipped;
     },
