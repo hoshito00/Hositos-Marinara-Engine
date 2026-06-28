@@ -355,7 +355,9 @@ export function GameWidgetFileControls({
     try {
       const importedWidgets = await importGameHudWidgetsFromFile(file);
       onImport(importedWidgets);
-      toast.success(importSuccessMessage?.(importedWidgets.length) ?? `Imported ${formatWidgetCount(importedWidgets.length)}.`);
+      toast.success(
+        importSuccessMessage?.(importedWidgets.length) ?? `Imported ${formatWidgetCount(importedWidgets.length)}.`,
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to import game widgets.");
     } finally {
@@ -676,7 +678,9 @@ function WidgetConfigFields({
 
   if (widget.type === "list") {
     const items = Array.isArray(widget.config.items) ? widget.config.items : [];
-    return <ListItemsField items={items.map((item) => String(item))} disabled={disabled} onConfigChange={onConfigChange} />;
+    return (
+      <ListItemsField items={items.map((item) => String(item))} disabled={disabled} onConfigChange={onConfigChange} />
+    );
   }
 
   if (widget.type === "inventory_grid") {
@@ -749,14 +753,10 @@ function ListItemsField({
   onConfigChange: (patch: Partial<HudWidgetConfig>) => void;
 }) {
   const externalValue = items.join("\n");
-  const lastCommittedValue = useRef(externalValue);
   const [draft, setDraft] = useState(externalValue);
 
   useEffect(() => {
-    if (externalValue !== lastCommittedValue.current) {
-      lastCommittedValue.current = externalValue;
-      setDraft(externalValue);
-    }
+    setDraft(externalValue);
   }, [externalValue]);
 
   return (
@@ -770,7 +770,6 @@ function ListItemsField({
           const nextDraft = event.target.value;
           const nextItems = parseListItemsDraft(nextDraft);
           setDraft(nextDraft);
-          lastCommittedValue.current = nextItems.join("\n");
           onConfigChange({ items: nextItems });
         }}
         className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-2 text-xs text-[var(--foreground)]"

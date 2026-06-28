@@ -436,7 +436,7 @@ export const ChatInput = memo(function ChatInput({
   const lastMessageRole = lastMessage?.role ?? null;
 
   const canRetry = !isStreaming && lastMessageRole === "user";
-  const canContinue = !isStreaming && mode === "roleplay" && lastMessageRole === "assistant";
+  const canContinue = false;
   const pendingAttachmentReads = activeChatId ? (pendingAttachmentReadsByChat[activeChatId] ?? 0) : 0;
   const isReadingAttachments = pendingAttachmentReads > 0;
   const hasPendingAttachments = isReadingAttachments || attachments.length > 0;
@@ -1579,9 +1579,7 @@ export const ChatInput = memo(function ChatInput({
         {/* Send / Stop button */}
 
         <button
-          onClick={
-            isStreaming ? () => useChatStore.getState().stopGeneration(activeChatId ?? undefined) : handleSend
-          }
+          onClick={isStreaming ? () => useChatStore.getState().stopGeneration(activeChatId ?? undefined) : handleSend}
           disabled={
             (!isStreaming && isReadingAttachments) ||
             (!hasInput && !attachments.length && !isStreaming && !canRetry && !canContinue) ||

@@ -76,14 +76,24 @@ const THEME_ACCENT_PULSE_ENABLED_VALUES = new Set(["1", "true", "yes", "on", "en
 const ACCENT_SOURCE_SELF_REFERENCE_RE =
   /var\(\s*--(?:primary|ring|accent|sidebar-accent|sidebar-accent-foreground|marinara-app-accent-solid|marinara-app-accent-gradient|marinara-chat-chrome-accent|marinara-chat-chrome-accent-gradient)\b/i;
 
-export class AppRecoveryBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state: { error: Error | null } = { error: null };
+function formatRecoveryError(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error) ?? "Unknown render error";
+  } catch {
+    return String(error);
+  }
+}
 
-  static getDerivedStateFromError(error: Error) {
-    return { error };
+export class AppRecoveryBoundary extends Component<{ children: ReactNode }, { error: unknown; hasError: boolean }> {
+  state: { error: unknown; hasError: boolean } = { error: null, hasError: false };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error, hasError: true };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
+  componentDidCatch(error: unknown, info: ErrorInfo) {
     console.error("[AppRecoveryBoundary] Unhandled render error", error, info.componentStack);
   }
 
@@ -100,7 +110,8 @@ export class AppRecoveryBoundary extends Component<{ children: ReactNode }, { er
   };
 
   render() {
-    if (!this.state.error) return this.props.children;
+    if (!this.state.hasError) return this.props.children;
+    const errorMessage = formatRecoveryError(this.state.error);
 
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background,#050312)] px-4 text-[var(--foreground,#f8fafc)]">
@@ -111,7 +122,7 @@ export class AppRecoveryBoundary extends Component<{ children: ReactNode }, { er
             returning after restart.
           </p>
           <pre className="mt-3 max-h-32 overflow-auto rounded-lg bg-black/30 p-2 text-xs text-[var(--muted-foreground,#cbd5e1)]">
-            {this.state.error.message}
+            {errorMessage}
           </pre>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
@@ -269,12 +280,7 @@ function clearCustomAppAccentVariables(root: HTMLElement) {
 }
 
 function canRunAccentAnimation(reducedMotionQuery: MediaQueryList, forcePaused = false) {
-  return (
-    document.visibilityState === "visible" &&
-    document.hasFocus() &&
-    !reducedMotionQuery.matches &&
-    !forcePaused
-  );
+  return document.visibilityState === "visible" && document.hasFocus() && !reducedMotionQuery.matches && !forcePaused;
 }
 
 async function recoverFromVersionSkew(serverVersion: string) {
@@ -702,11 +708,7 @@ export function App() {
       <div
         onClickCapture={(event) => {
           if (!(event.target instanceof Element)) return;
-          if (
-            event.target.closest(
-              "[data-close-button],button[aria-label^='Close'],button[aria-label^='Dismiss']",
-            )
-          ) {
+          if (event.target.closest("[data-close-button],button[aria-label^='Close'],button[aria-label^='Dismiss']")) {
             toast.dismiss();
           }
         }}

@@ -128,10 +128,18 @@ function getGitLauncherCommand(platform: ServerPlatform) {
   }
 }
 
+function getManualGitApplyCommand(channel = UPDATE_CHANNELS.stable) {
+  const checkoutCommand =
+    channel.id === "staging"
+      ? `git checkout --detach ${channel.targetRef}`
+      : `(git merge --ff-only ${channel.targetRef} || git checkout --detach ${channel.targetRef})`;
+  return `git fetch ${UPDATE_REMOTE} ${channel.fetchRef} && ${checkoutCommand} && pnpm install --frozen-lockfile && pnpm --filter @marinara-engine/shared build && pnpm --filter @marinara-engine/server --filter @marinara-engine/client --parallel run build`;
+}
+
 function getManualUpdateCommand(installType: InstallType, platform: ServerPlatform, channel = UPDATE_CHANNELS.stable) {
   if (installType === "docker") return DOCKER_UPDATE_COMMAND;
   if (installType === "git" && channel.id === "staging") {
-    return `git fetch ${UPDATE_REMOTE} ${channel.fetchRef} && (git merge --ff-only ${channel.targetRef} || git checkout --detach ${channel.targetRef}) && pnpm install --frozen-lockfile && pnpm --filter @marinara-engine/shared build && pnpm --filter @marinara-engine/server --filter @marinara-engine/client --parallel run build`;
+    return getManualGitApplyCommand(channel);
   }
   if (installType === "git") return getGitLauncherCommand(platform);
   return null;
@@ -683,7 +691,7 @@ export async function updatesRoutes(app: FastifyInstance) {
       // checkout is expected there; normal main-branch clones still fast-forward.
       if (oldHead !== targetHead) {
         try {
-          if (currentBranch) {
+          if (currentBranch === channel.branch) {
             await execFileAsync("git", ["merge", "--ff-only", channel.targetRef], {
               cwd: root,
               timeout: 60_000,
@@ -781,7 +789,7 @@ export async function updatesRoutes(app: FastifyInstance) {
       const pnpmVersion = getPinnedPnpmVersion(root);
       return reply.status(500).send({
         error: `Update failed: ${message}`,
-        hint: `You can try running the update manually: git fetch ${UPDATE_REMOTE} ${channel.fetchRef} && (git merge --ff-only ${channel.targetRef} || git checkout --detach ${channel.targetRef}) && pnpm install --frozen-lockfile && pnpm --filter @marinara-engine/shared build && pnpm --filter @marinara-engine/server --filter @marinara-engine/client --parallel run build. If pnpm is unavailable, run npm install -g pnpm@${pnpmVersion} first.`,
+        hint: `You can try running the update manually: ${getManualGitApplyCommand(channel)}. If pnpm is unavailable, run npm install -g pnpm@${pnpmVersion} first.`,
       });
     }
   });

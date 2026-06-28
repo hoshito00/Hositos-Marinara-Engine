@@ -190,7 +190,8 @@ function isProfessorMariChatActive(chat: ProfessorMariChatSummary) {
   try {
     const metadata =
       typeof raw === "string" ? (JSON.parse(raw) as Record<string, unknown>) : (raw as Record<string, unknown> | null);
-    return metadata?.professorMariActive !== false && metadata?.professorMariArchived !== true;
+    if (!metadata) return false;
+    return metadata.professorMariActive === true && metadata.professorMariArchived !== true;
   } catch {
     return false;
   }
@@ -2041,6 +2042,10 @@ export function HomeProfessorMariChat({
   }, [skillsMenuOpen]);
 
   const toggleChatHistory = useCallback(() => {
+    if (!chatHistoryOpen && isBusy) {
+      toast.info("Wait for Professor Mari to finish before switching chats.");
+      return;
+    }
     const next = !chatHistoryOpen;
     if (next) {
       setConnectionMenuOpen(false);
@@ -2048,7 +2053,7 @@ export function HomeProfessorMariChat({
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     }
     setChatHistoryOpen(next);
-  }, [chatHistoryOpen]);
+  }, [chatHistoryOpen, isBusy]);
 
   useEffect(() => {
     window.addEventListener("marinara:home-professor-mari-close", closeChatWindow);
@@ -2348,6 +2353,10 @@ export function HomeProfessorMariChat({
 
   const handleSelectProfessorChat = useCallback(
     async (id: string) => {
+      if (isBusy) {
+        toast.info("Wait for Professor Mari to finish before switching chats.");
+        return;
+      }
       try {
         const chat = await api.post<Chat>(`/chats/internal/professor-mari/chats/${id}/activate`);
         setChatId(chat.id);
@@ -2367,7 +2376,7 @@ export function HomeProfessorMariChat({
         });
       }
     },
-    [loadChatHistory, loadMessages, qc],
+    [isBusy, loadChatHistory, loadMessages, qc],
   );
 
   const handleRenameProfessorChat = useCallback(
@@ -2954,7 +2963,8 @@ export function HomeProfessorMariChat({
                                       <button
                                         type="button"
                                         onClick={() => void handleSelectProfessorChat(item.id)}
-                                        className="min-w-0 flex-1 text-left"
+                                        disabled={isBusy}
+                                        className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60"
                                       >
                                         <div className="truncate text-xs font-semibold text-[var(--foreground)]">
                                           {item.name || "Professor Mari chat"}
@@ -3035,6 +3045,7 @@ export function HomeProfessorMariChat({
                           <button
                             type="button"
                             onClick={toggleChatHistory}
+                            disabled={isBusy && !chatHistoryOpen}
                             className={cn(
                               "inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.6875rem] font-semibold transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-50",
                               "mari-chrome-accent-text-muted mari-accent-animated hover:text-[var(--marinara-chat-chrome-button-text-hover)]",

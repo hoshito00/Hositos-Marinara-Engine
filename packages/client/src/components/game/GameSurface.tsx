@@ -1778,12 +1778,7 @@ function GameVolumeMixer({
           >
             {audioMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className={ROLEPLAY_POPOVER_CLOSE_BUTTON}
-            aria-label="Close volume"
-          >
+          <button type="button" onClick={onClose} className={ROLEPLAY_POPOVER_CLOSE_BUTTON} aria-label="Close volume">
             <X size={ROLEPLAY_POPOVER_CLOSE_ICON_SIZE} />
           </button>
         </div>
@@ -2881,12 +2876,7 @@ function GameSurfaceComponent({
         useGameAssetStore.getState().setCurrentBackground(savedBg);
       }
     }
-    if (
-      !useMusicDjPlayerMusic &&
-      currentMusic &&
-      assetMap?.[currentMusic] &&
-      !audioManager.getState().musicTag
-    ) {
+    if (!useMusicDjPlayerMusic && currentMusic && assetMap?.[currentMusic] && !audioManager.getState().musicTag) {
       audioManager.playMusic(currentMusic, assetMap);
     }
     if (currentAmbient && assetMap?.[currentAmbient] && !audioManager.getState().ambientTag) {
@@ -6338,7 +6328,7 @@ function GameSurfaceComponent({
           typeof presentCharacter.avatarPath === "string" && presentCharacter.avatarPath.trim()
             ? presentCharacter.avatarPath
             : null,
-        avatarCrop: presentCharacter.avatarCrop ?? null,
+        avatarCrop: normalizeAvatarCropValue(presentCharacter.avatarCrop),
         canRemove: false,
       });
     }
@@ -8808,11 +8798,7 @@ function GameSurfaceComponent({
             className="marinara-chat-popover__item flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[var(--marinara-chat-chrome-panel-text)] transition-colors hover:bg-[var(--marinara-chat-chrome-highlight-bg-hover)] hover:text-[var(--marinara-chat-chrome-highlight-text)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
             title="Generate a background for the current scene"
           >
-            {manualBackgroundGenerating ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <ImagePlus size={14} />
-            )}
+            {manualBackgroundGenerating ? <Loader2 size={14} className="animate-spin" /> : <ImagePlus size={14} />}
             Generate background
           </button>
         </div>
@@ -8873,9 +8859,7 @@ function GameSurfaceComponent({
                 className={cn("pointer-events-none absolute right-3 z-50", topOverlayOffsetClass)}
               >
                 {/* Desktop controls */}
-                <div
-                  className={cn("pointer-events-auto hidden items-center md:flex", CHAT_TOOLBAR_ICON_GAP_CLASS)}
-                >
+                <div className={cn("pointer-events-auto hidden items-center md:flex", CHAT_TOOLBAR_ICON_GAP_CLASS)}>
                   <ChatBranchSelector
                     activeChatId={activeChatId}
                     activeChatName={chat.name}

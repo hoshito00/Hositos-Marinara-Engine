@@ -1199,7 +1199,35 @@ function isNpcTrackerAvatarPath(value: unknown): value is string {
 }
 
 function isTrackerAvatarCrop(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === "object" && !Array.isArray(value);
+  if (!isPlainRecord(value)) return false;
+
+  const hasCurrentShape =
+    typeof value.srcX === "number" &&
+    typeof value.srcY === "number" &&
+    typeof value.srcWidth === "number" &&
+    typeof value.srcHeight === "number" &&
+    Number.isFinite(value.srcX) &&
+    Number.isFinite(value.srcY) &&
+    Number.isFinite(value.srcWidth) &&
+    Number.isFinite(value.srcHeight) &&
+    value.srcX >= 0 &&
+    value.srcY >= 0 &&
+    value.srcWidth > 0 &&
+    value.srcHeight > 0 &&
+    value.srcX + value.srcWidth <= 1.001 &&
+    value.srcY + value.srcHeight <= 1.001;
+  if (hasCurrentShape) return true;
+
+  return (
+    typeof value.zoom === "number" &&
+    typeof value.offsetX === "number" &&
+    typeof value.offsetY === "number" &&
+    Number.isFinite(value.zoom) &&
+    Number.isFinite(value.offsetX) &&
+    Number.isFinite(value.offsetY) &&
+    value.zoom > 0 &&
+    (value.fullImage === undefined || typeof value.fullImage === "boolean")
+  );
 }
 
 export function isManualTrackerCharacterId(value: unknown): boolean {

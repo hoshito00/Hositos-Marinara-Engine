@@ -347,7 +347,8 @@ const HOME_FAQ_ITEMS: HomeFaqItem[] = [
     id: "booru-prompts",
     category: "Images",
     question: "How do I steer Illustrator prompts?",
-    answer: "Choose an Illustrator prompt mode from that chat's agent menu, or edit the agent prompt from the Agents tab.",
+    answer:
+      "Choose an Illustrator prompt mode from that chat's agent menu, or edit the agent prompt from the Agents tab.",
     bullets: [
       "Illustration, Comic Page, Colored Manga, B&W Manga, Background, and Selfie modes all tune the prompt differently.",
       "Use the default style from Style Profiles in Advanced settings when you want a shared image style.",
@@ -519,7 +520,8 @@ export function HomeFaq({
   };
   const trimmedSearch = searchQuery.trim().toLowerCase();
   const visibleFaqItems = useMemo(
-    () => (trimmedSearch ? HOME_FAQ_ITEMS.filter((item) => getFaqSearchText(item).includes(trimmedSearch)) : HOME_FAQ_ITEMS),
+    () =>
+      trimmedSearch ? HOME_FAQ_ITEMS.filter((item) => getFaqSearchText(item).includes(trimmedSearch)) : HOME_FAQ_ITEMS,
     [trimmedSearch],
   );
 
@@ -562,6 +564,7 @@ export function HomeFaq({
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search FAQ"
+                  aria-label="Search FAQ"
                   className="min-w-0 flex-1 bg-transparent text-[0.6875rem] text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]/65"
                 />
                 {searchQuery ? (
@@ -736,6 +739,7 @@ export function HomeFaq({
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search FAQ"
+                  aria-label="Search FAQ"
                   className="min-w-0 flex-1 bg-transparent text-xs text-[var(--foreground)] outline-none placeholder:text-[var(--muted-foreground)]/65"
                 />
                 {searchQuery ? (

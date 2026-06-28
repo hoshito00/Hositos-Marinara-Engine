@@ -414,7 +414,12 @@ async function buildCharacterDisplaySnapshot(app: FastifyInstance, characterId: 
   const row = await charactersStore.getById(characterId);
   if (!row) return null;
 
-  const data = JSON.parse(row.data as string) as CharacterData;
+  let data: CharacterData;
+  try {
+    data = JSON.parse(row.data as string) as CharacterData;
+  } catch {
+    return null;
+  }
   const extensions = (data.extensions ?? {}) as Record<string, unknown>;
   return {
     name: data.name ?? "Character",
@@ -555,64 +560,71 @@ export async function chatsRoutes(app: FastifyInstance) {
     return sanitizeChatGameNpcAvatars(updated ?? created);
   });
 
-  app.post<{ Querystring: { connectionId?: string; personaId?: string } }>("/internal/professor-mari/restart", async (req) => {
-    const professorChats = sortProfessorMariChats((await storage.list()).filter(isHomeProfessorMariChat));
-    const active = professorChats.find(isActiveHomeProfessorMariChat) ?? professorChats[0] ?? null;
-    const connectionId =
-      typeof req.query.connectionId === "string" && req.query.connectionId ? req.query.connectionId : (active?.connectionId ?? null);
-    const personaId =
-      typeof req.query.personaId === "string" && req.query.personaId ? req.query.personaId : (active?.personaId ?? null);
+  app.post<{ Querystring: { connectionId?: string; personaId?: string } }>(
+    "/internal/professor-mari/restart",
+    async (req) => {
+      const professorChats = sortProfessorMariChats((await storage.list()).filter(isHomeProfessorMariChat));
+      const active = professorChats.find(isActiveHomeProfessorMariChat) ?? professorChats[0] ?? null;
+      const connectionId =
+        typeof req.query.connectionId === "string" && req.query.connectionId
+          ? req.query.connectionId
+          : (active?.connectionId ?? null);
+      const personaId =
+        typeof req.query.personaId === "string" && req.query.personaId
+          ? req.query.personaId
+          : (active?.personaId ?? null);
 
-    if (active && (await storage.countMessages(active.id)) > 0) {
-      const metadata = parseChatMetadata(active.metadata);
-      const currentName = typeof active.name === "string" && active.name.trim() ? active.name.trim() : "";
-      const shouldRename = currentName === "Professor Mari";
-      await storage.update(active.id, {
-        name: shouldRename ? formatProfessorMariStashName() : active.name,
+      if (active && (await storage.countMessages(active.id)) > 0) {
+        const metadata = parseChatMetadata(active.metadata);
+        const currentName = typeof active.name === "string" && active.name.trim() ? active.name.trim() : "";
+        const shouldRename = currentName === "Professor Mari";
+        await storage.update(active.id, {
+          name: shouldRename ? formatProfessorMariStashName() : active.name,
+          characterIds: [PROFESSOR_MARI_ID],
+          connectionId: active.connectionId ?? null,
+          personaId: active.personaId ?? null,
+          promptPresetId: null,
+        });
+        await storage.patchMetadata(active.id, {
+          ...metadata,
+          internalAssistant: PROFESSOR_MARI_INTERNAL_CHAT_MARKER,
+          professorMariActive: false,
+          professorMariArchived: true,
+          enableAgents: false,
+          autonomousMessages: false,
+          characterExchanges: false,
+          tags: ["internal"],
+        });
+      } else if (active) {
+        await storage.patchMetadata(active.id, {
+          internalAssistant: PROFESSOR_MARI_INTERNAL_CHAT_MARKER,
+          professorMariActive: false,
+          professorMariArchived: true,
+        });
+      }
+
+      const created = await storage.create({
+        name: "Professor Mari",
+        mode: "conversation",
         characterIds: [PROFESSOR_MARI_ID],
-        connectionId: active.connectionId ?? null,
-        personaId: active.personaId ?? null,
+        groupId: null,
+        personaId,
         promptPresetId: null,
+        connectionId,
       });
-      await storage.patchMetadata(active.id, {
-        ...metadata,
+      if (!created) return created;
+      const updated = await storage.patchMetadata(created.id, {
         internalAssistant: PROFESSOR_MARI_INTERNAL_CHAT_MARKER,
-        professorMariActive: false,
-        professorMariArchived: true,
+        professorMariActive: true,
+        professorMariArchived: false,
         enableAgents: false,
         autonomousMessages: false,
         characterExchanges: false,
         tags: ["internal"],
       });
-    } else if (active) {
-      await storage.patchMetadata(active.id, {
-        internalAssistant: PROFESSOR_MARI_INTERNAL_CHAT_MARKER,
-        professorMariActive: false,
-        professorMariArchived: true,
-      });
-    }
-
-    const created = await storage.create({
-      name: "Professor Mari",
-      mode: "conversation",
-      characterIds: [PROFESSOR_MARI_ID],
-      groupId: null,
-      personaId,
-      promptPresetId: null,
-      connectionId,
-    });
-    if (!created) return created;
-    const updated = await storage.patchMetadata(created.id, {
-      internalAssistant: PROFESSOR_MARI_INTERNAL_CHAT_MARKER,
-      professorMariActive: true,
-      professorMariArchived: false,
-      enableAgents: false,
-      autonomousMessages: false,
-      characterExchanges: false,
-      tags: ["internal"],
-    });
-    return sanitizeChatGameNpcAvatars(updated ?? created);
-  });
+      return sanitizeChatGameNpcAvatars(updated ?? created);
+    },
+  );
 
   app.post<{ Params: { id: string } }>("/internal/professor-mari/chats/:id/activate", async (req, reply) => {
     const professorChats = (await storage.list()).filter(isHomeProfessorMariChat);
@@ -637,14 +649,17 @@ export async function chatsRoutes(app: FastifyInstance) {
     return sanitizeChatGameNpcAvatars(updated ?? target);
   });
 
-  app.patch<{ Params: { id: string }; Body: { name?: unknown } }>("/internal/professor-mari/chats/:id", async (req, reply) => {
-    const target = (await storage.list()).find((chat) => chat.id === req.params.id && isHomeProfessorMariChat(chat));
-    if (!target) return reply.status(404).send({ error: "Professor Mari chat not found" });
-    const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-    if (!name) return reply.status(400).send({ error: "Name is required" });
-    const updated = await storage.update(target.id, { name });
-    return sanitizeChatGameNpcAvatars(updated ?? target);
-  });
+  app.patch<{ Params: { id: string }; Body: { name?: unknown } }>(
+    "/internal/professor-mari/chats/:id",
+    async (req, reply) => {
+      const target = (await storage.list()).find((chat) => chat.id === req.params.id && isHomeProfessorMariChat(chat));
+      if (!target) return reply.status(404).send({ error: "Professor Mari chat not found" });
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      if (!name) return reply.status(400).send({ error: "Name is required" });
+      const updated = await storage.update(target.id, { name });
+      return sanitizeChatGameNpcAvatars(updated ?? target);
+    },
+  );
 
   app.delete<{ Params: { id: string } }>("/internal/professor-mari/chats/:id", async (req, reply) => {
     const professorChats = (await storage.list()).filter(isHomeProfessorMariChat);
@@ -813,18 +828,21 @@ export async function chatsRoutes(app: FastifyInstance) {
       Object.prototype.hasOwnProperty.call(incoming, "hideSummarisedMessages") &&
       typeof incoming.hideSummarisedMessages === "boolean"
     ) {
-      const currentMeta = parseExtra(chat.metadata) as Record<string, unknown>;
-      const previousHideEnabled = currentMeta.hideSummarisedMessages === true;
-      if (previousHideEnabled !== incoming.hideSummarisedMessages) {
+      return storage.patchMetadata(req.params.id, async (freshMeta) => {
+        const previousHideEnabled = freshMeta.hideSummarisedMessages === true;
+        if (previousHideEnabled === incoming.hideSummarisedMessages) {
+          return incoming;
+        }
+
         const allMessages = await storage.listMessages(req.params.id);
-        const currentEntries = normalizeChatSummaryEntries(currentMeta.summaryEntries, {
-          legacySummary: typeof currentMeta.summary === "string" ? currentMeta.summary : null,
+        const currentEntries = normalizeChatSummaryEntries(freshMeta.summaryEntries, {
+          legacySummary: typeof freshMeta.summary === "string" ? freshMeta.summary : null,
         });
         const now = new Date().toISOString();
         let nextEntries = currentEntries;
 
         if (incoming.hideSummarisedMessages) {
-          const tail = resolveRoleplaySummaryTail(currentMeta.summaryTailMessages);
+          const tail = resolveRoleplaySummaryTail(freshMeta.summaryTailMessages);
           nextEntries = [];
           for (const entry of currentEntries) {
             if (!entry.enabled || !entry.messageIds?.length) {
@@ -839,9 +857,7 @@ export async function chatsRoutes(app: FastifyInstance) {
             });
             const hiddenMessageIds =
               eligibleToHide.length > 0 ? await storage.bulkSetHiddenFromAI(req.params.id, eligibleToHide, true) : [];
-            const ownedHiddenMessageIds = Array.from(
-              new Set([...(entry.hiddenMessageIds ?? []), ...hiddenMessageIds]),
-            );
+            const ownedHiddenMessageIds = Array.from(new Set([...(entry.hiddenMessageIds ?? []), ...hiddenMessageIds]));
             nextEntries.push(
               ownedHiddenMessageIds.length > 0
                 ? { ...entry, hiddenMessageIds: ownedHiddenMessageIds, updatedAt: now }
@@ -862,12 +878,12 @@ export async function chatsRoutes(app: FastifyInstance) {
           });
         }
 
-        return storage.patchMetadata(req.params.id, {
+        return {
           ...incoming,
           summaryEntries: nextEntries,
           summary: compileChatSummaryEntries(nextEntries),
-        });
-      }
+        };
+      });
     }
     return storage.patchMetadata(req.params.id, incoming);
   });
@@ -1283,15 +1299,18 @@ export async function chatsRoutes(app: FastifyInstance) {
   });
 
   // Delete all chats in a group (all branches)
-  app.delete<{ Params: { groupId: string }; Querystring: { force?: string } }>("/group/:groupId", async (req, reply) => {
-    const force = req.query.force === "true" || req.query.force === "1";
-    const guard = await storage.canDeleteGroup(req.params.groupId, { force });
-    if (!guard.allowed) {
-      return reply.status(409).send({ error: guard.reason });
-    }
-    await storage.removeGroup(req.params.groupId);
-    return reply.status(204).send();
-  });
+  app.delete<{ Params: { groupId: string }; Querystring: { force?: string } }>(
+    "/group/:groupId",
+    async (req, reply) => {
+      const force = req.query.force === "true" || req.query.force === "1";
+      const guard = await storage.canDeleteGroup(req.params.groupId, { force });
+      if (!guard.allowed) {
+        return reply.status(409).send({ error: guard.reason });
+      }
+      await storage.removeGroup(req.params.groupId);
+      return reply.status(204).send();
+    },
+  );
 
   // Delete chat
   app.delete<{ Params: { id: string }; Querystring: { force?: string } }>("/:id", async (req, reply) => {
@@ -1315,9 +1334,11 @@ export async function chatsRoutes(app: FastifyInstance) {
         }
       }
     }
-    const activeGenerations = (app as unknown as {
-      activeGenerations?: Map<string, { abortController?: AbortController }>;
-    }).activeGenerations;
+    const activeGenerations = (
+      app as unknown as {
+        activeGenerations?: Map<string, { abortController?: AbortController }>;
+      }
+    ).activeGenerations;
     activeGenerations?.get(req.params.id)?.abortController?.abort();
     activeGenerations?.delete(req.params.id);
     clearChatActivity(req.params.id);
