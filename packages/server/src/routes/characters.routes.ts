@@ -673,6 +673,12 @@ export async function charactersRoutes(app: FastifyInstance) {
     }
 
     const merits = parseMeritGenerationResponse(content, collectAttributeNames(domains));
+    if (merits.length === 0) {
+      logger.warn(
+        { characterId: req.params.id, model: connection.model, rawContent: content.slice(0, 4000) },
+        "[characters] Hoshito Merit generation returned no parseable merits — check rawContent above",
+      );
+    }
     return { merits };
   });
 

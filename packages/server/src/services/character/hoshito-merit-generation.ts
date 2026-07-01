@@ -88,8 +88,14 @@ export function buildMeritGenerationPrompt(input: MeritGenerationInput): ChatMes
 
 ${HOSHITO_MERIT_RULES_BLOCK}
 
-Respond with ONLY a JSON array (no prose, no markdown fences) of 3-5 Merit objects, each shaped exactly as:
+Respond with ONLY a JSON array — the top-level response must start with "[" and end with "]". No prose, no markdown fences, no wrapping object like {"merits": [...]}. Just the bare array, containing 3-5 Merit objects shaped exactly as:
 { "category": "feat" | "artifact" | "ability" | "augment" | "contact", "name": string, "description": string, "sparkGrantAttribute"?: string }
+
+Example of the exact response shape (values are illustrative only, do not reuse them):
+[
+  { "category": "feat", "name": "Blade-Marked Reflexes", "description": "Years of duel training sharpened her reactions to a hair-trigger.", "sparkGrantAttribute": "AGI" },
+  { "category": "contact", "name": "Old Instructor", "description": "Retired swordmaster who still answers her letters." }
+]
 
 Rules:
 - Ground every Merit in the character's description, personality, scenario, and backstory below — don't invent unrelated content.
@@ -138,25 +144,17 @@ export function parseMeritGenerationResponse(raw: string, validAttributeNames: s
     .trim()
     .replace(/```(?:json)?\s*/gi, "")
     .replace(/```/g, "");
-  const first = cleaned.indexOf("[");
-  const last = cleaned.lastIndexOf("]");
-  if (first === -1 || last === -1 || last < first) return [];
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned.slice(first, last + 1));
-  } catch {
-    return [];
-  }
-  if (!Array.isArray(parsed)) return [];
+  const candidateArray = extractMeritArray(cleaned);
+  if (!candidateArray) return [];
 
   const validAttrLookup = new Set(validAttributeNames.map((name) => name.toUpperCase()));
   const merits: HoshitoMerit[] = [];
 
-  for (const entry of parsed) {
+  for (const entry of candidateArray) {
     if (!entry || typeof entry !== "object") continue;
     const e = entry as Record<string, unknown>;
-    const category = typeof e.category === "string" ? e.category : "";
+    const category = typeof e.category === "string" ? e.category.toLowerCase().trim() : "";
     const name = typeof e.name === "string" ? e.name.trim() : "";
     const description = typeof e.description === "string" ? e.description.trim() : "";
     if (!VALID_MERIT_CATEGORIES.has(category) || !name || !description) continue;
@@ -175,4 +173,45 @@ export function parseMeritGenerationResponse(raw: string, validAttributeNames: s
   }
 
   return merits;
+}
+
+/**
+ * Models don't reliably return a bare JSON array even when told to — many wrap it
+ * as { "merits": [...] }, or return a single Merit object instead of an array of
+ * one. Try, in order: a bare array; an object with a merits/items/result array
+ * field; a single object that looks like one Merit (wrapped as a 1-element array).
+ */
+function extractMeritArray(cleaned: string): unknown[] | null {
+  const arrayStart = cleaned.indexOf("[");
+  const arrayEnd = cleaned.lastIndexOf("]");
+  if (arrayStart !== -1 && arrayEnd !== -1 && arrayEnd > arrayStart) {
+    try {
+      const parsed = JSON.parse(cleaned.slice(arrayStart, arrayEnd + 1));
+      if (Array.isArray(parsed)) return parsed;
+    } catch {
+      // fall through to object-shaped attempts below
+    }
+  }
+
+  const objStart = cleaned.indexOf("{");
+  const objEnd = cleaned.lastIndexOf("}");
+  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+    try {
+      const parsedObj = JSON.parse(cleaned.slice(objStart, objEnd + 1));
+      if (parsedObj && typeof parsedObj === "object") {
+        for (const key of ["merits", "items", "result", "data"]) {
+          const value = (parsedObj as Record<string, unknown>)[key];
+          if (Array.isArray(value)) return value;
+        }
+        // Looks like a single Merit returned bare, not in an array.
+        if (typeof (parsedObj as Record<string, unknown>).category === "string") {
+          return [parsedObj];
+        }
+      }
+    } catch {
+      // give up below
+    }
+  }
+
+  return null;
 }
